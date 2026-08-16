@@ -15,5 +15,32 @@
   "scripts": {
     "test:tools": "node dsh/index.js --self-test"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "files": [
+    "dsh/",
+    "skills/",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "video-understand",
+    "avis",
+    "video-understanding",
+    "low-cost",
+    "bilibili"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ilps2/dsh-video-understand.git"
+  },
+  "homepage": "https://github.com/ilps2/dsh-video-understand",
+  "bugs": {
+    "url": "https://github.com/ilps2/dsh-video-understand/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  }
 }
