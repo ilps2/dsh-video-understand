@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.1 (unreleased)
+## 0.1.1 (2026-08-17)
 - feat: `video_understand` tool supports L1/L2 visual levels (`level`/`window` params) — on-demand frame sampling + qwen3-vl-flash, +0.0005 CNY for frame-level details
 - test: tool registration + schema self-test (mock ctx)
 - ci: run self-test on push/PR
