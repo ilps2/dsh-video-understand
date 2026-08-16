@@ -1,5 +1,8 @@
 # dsh-video-understand
 
+[![npm version](https://img.shields.io/npm/v/dsh-video-understand)](https://www.npmjs.com/package/dsh-video-understand)
+[![GitHub stars](https://img.shields.io/github/stars/ilps2/dsh-video-understand)](https://github.com/ilps2/dsh-video-understand)
+
 低成本视频理解插件：给 dsh agent 注册 `video_understand` 工具——B站链接 / BV 号 / 本地视频 → AVIS 信息层 → 摘要+问答（token 压缩 99.95%+，成本约 0.006 元/视频）。
 
 ## 安装
@@ -19,13 +22,15 @@ pnpm install && dsh web   # 重启生效
 
 ## 工具
 
-`video_understand(target, questions?, noDownload?)`
+`video_understand(target, questions?, noDownload?, level?, window?)`
 
 | 参数 | 类型 | 说明 |
 |---|---|---|
 | target | string | B站 URL / BV 号 / 本地视频绝对路径 |
 | questions | string[] | 可选，自定义问题（默认 3 问） |
 | noDownload | boolean | 本地文件置 true |
+| level | string | `l0`(默认) / `l1`(+3-5帧VLM视觉摘要,+0.0005元) / `l2`(+时间窗密集帧证据) |
+| window | string | L2 时间窗，如 `10-30` 或秒数（auto=轨迹最活跃30s） |
 
 返回 JSON：`video / duration_s / token_compression_pct / cost_cny / answers[]`。
 
