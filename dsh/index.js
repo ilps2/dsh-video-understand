@@ -34,6 +34,8 @@ const OUTPUT_SCHEMA = {
     token_compression_pct: { type: 'number' },
     cost_cny: { type: 'number' },
     prompt_cache_hit_tokens: { type: 'number' },
+    layer_cached: { type: 'boolean' },
+    suggest_layer: { type: 'boolean' },
     answers: {
       type: 'array',
       items: {
@@ -72,7 +74,7 @@ export function apply(ctx, config = {}) {
   const tool = (toolName) => ({
     name: toolName,
     description:
-      '低成本理解一个视频：输入 B站链接 / BV 号 / 本地视频路径，返回摘要+问答（token 压缩 99.95%+，成本约 0.006 元/视频）。可选 level 参数升级视觉级（l1 画面细节 +0.0005 元 / l2 时间窗证据）。' +
+      '低成本理解一个视频：输入 B站链接 / BV 号 / 本地视频路径，返回摘要+问答（token 压缩 99.95%+）。可选 level 参数升级视觉级（l1/l2）。返回中 suggest_layer=true 表示该视频尚未建完整语义层（base全量+CLIP，一次性2-4min，之后任何问题秒答）——若用户表示还会追问该视频其他问题，主动询问是否建层。' +
       '用户提到"理解这个视频/视频讲了什么/总结视频"或给出视频链接时使用。' +
       '可选 questions 数组自定义要问的问题（默认 3 问：核心内容/亮点/适合人群）。' +
       '需要 live-clip 仓库（understand_video.py）与模型依赖（见 README，bash install_models.sh 一键装）。',
@@ -112,6 +114,9 @@ export function apply(ctx, config = {}) {
           lines.push(`\n❓ ${a.question}\n${a.answer}`)
         }
         lines.push(`\n— token 压缩 ${value.token_compression_pct}% | 成本 ≈ ${value.cost_cny} 元 | 耗时 ${value.elapsed_s}s`)
+        if (value.suggest_layer) {
+          lines.push(`\n💡 该视频可建完整语义层（一次性 2-4min，之后追问秒答）——如用户还会问其他问题，可主动询问是否建层`)
+        }
         return [{ type: 'text', text: lines.join('\n') }]
       },
     },
