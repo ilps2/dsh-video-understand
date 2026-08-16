@@ -1,0 +1,6 @@
+# dsh bundle layer: mount the video-understand tool (dsh/index.js via the
+# package root export). Registers a `video_understand` tool that spawns the
+# live-clip understand_video.py pipeline (download → AVIS info layer → LLM).
+- insert:
+    - id: video-understand
+      name: 'dsh-video-understand'
