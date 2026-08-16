@@ -5,14 +5,15 @@
 ## 安装
 
 ```bash
+# 0. npm 一键安装（已发布 npm: dsh-video-understand@0.1.0）
+npm install dsh-video-understand
+# 或 dsh plugin add dsh-video-understand（若 dsh 支持 npm 源）
+
 # 1. 前置：live-clip 引擎（understand_video.py + avis.py）
 git clone git@github.com:ilps2/live-clip.git ~/Desktop/live-clip-repo
 cd ~/Desktop/live-clip-repo && bash install_models.sh   # 模型走国内镜像，30 秒
 
-# 2. 装插件（本地目录或发布后 dsh plugin add）
-# 本地：在 profile 的 package.json 加
-#   "dsh-video-understand": "file:/path/to/dsh-video-understand"
-# 并在 dsh.profile.bundles 加 "dsh-video-understand"
+# 2. profile 挂载：package.json 加依赖 + bundles 加 "dsh-video-understand"
 pnpm install && dsh web   # 重启生效
 ```
 
