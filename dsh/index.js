@@ -72,7 +72,7 @@ export function apply(ctx, config = {}) {
   const tool = (toolName) => ({
     name: toolName,
     description:
-      '低成本理解一个视频：输入 B站链接 / BV 号 / 本地视频路径，返回摘要+问答（token 压缩 99.95%+，成本约 0.006 元/视频）。' +
+      '低成本理解一个视频：输入 B站链接 / BV 号 / 本地视频路径，返回摘要+问答（token 压缩 99.95%+，成本约 0.006 元/视频）。可选 level 参数升级视觉级（l1 画面细节 +0.0005 元 / l2 时间窗证据）。' +
       '用户提到"理解这个视频/视频讲了什么/总结视频"或给出视频链接时使用。' +
       '可选 questions 数组自定义要问的问题（默认 3 问：核心内容/亮点/适合人群）。' +
       '需要 live-clip 仓库（understand_video.py）与模型依赖（见 README，bash install_models.sh 一键装）。',
@@ -91,6 +91,15 @@ export function apply(ctx, config = {}) {
         noDownload: {
           type: 'boolean',
           description: 'target 为本地文件时置 true，跳过下载',
+        },
+        level: {
+          type: 'string',
+          enum: ['l0', 'l1', 'l2'],
+          description: 'l0=信息层(默认,~0.006元) l1=+3-5帧VLM视觉摘要(+0.0005元) l2=+时间窗密集帧证据',
+        },
+        window: {
+          type: 'string',
+          description: 'L2 时间窗，如 10-30 或秒数（auto=轨迹最活跃30s）',
         },
       },
       required: ['target'],
@@ -120,6 +129,12 @@ export function apply(ctx, config = {}) {
       }
       const cliArgs = [args.target, '--json']
       if (args.noDownload) cliArgs.push('--no-download')
+      if (args.level && args.level !== 'l0') {
+        cliArgs.push('--level', args.level)
+        if (args.level === 'l2' && args.window) {
+          cliArgs.push('--l2-window', args.window)
+        }
+      }
       for (const q of args.questions || []) {
         cliArgs.push('--ask', q)
       }
