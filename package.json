@@ -1,7 +1,7 @@
 {
   "name": "dsh-video-understand",
-  "version": "0.2.0",
-  "description": "低成本视频理解工具：B站链接/BV/本地视频 → 信息层 → 摘要+问答（token 压缩 99.95%+）。",
+  "version": "0.3.0",
+  "description": "低成本视频理解工具：B站链接/BV/本地视频 → 信息层 → 摘要+问答（token 压缩 99.95%+）。引擎自包含，无需外部依赖。",
   "type": "module",
   "exports": {
     ".": "./dsh/index.js",
@@ -13,11 +13,13 @@
     }
   },
   "scripts": {
-    "test:tools": "node dsh/index.js --self-test"
+    "test:tools": "node dsh/index.js --self-test",
+    "install-engine": "pip3 install -r engine/requirements.txt 2>/dev/null || true"
   },
   "license": "MIT",
   "files": [
     "dsh/",
+    "engine/",
     "skills/",
     "cordis.patch.yml",
     "README.md"

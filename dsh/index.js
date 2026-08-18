@@ -1,26 +1,27 @@
 // dsh-video-understand — host half.
 //
-// Registers a `video_understand` tool backed by the live-clip
+// Registers a `video_understand` tool backed by the vendored
 // understand_video.py pipeline. A registered tool schema reaches the model
 // on every request (no trigger gamble, unlike prompt-triggered skills), so
 // the agent reliably knows it can ask about a video.
 //
 // Pipeline (spawned, token compression 99.95%+ vs frame sampling):
 //   target(B站URL/BV/本地路径) → 下载(360p) → AVIS 信息层(MV/ASR/场景/YOLO轨迹)
-//   → 融合 prompt → DeepSeek 摘要+问答 → JSON
+//   → 融合 prompt → MiMo 摘要+问答 → JSON
 //
-// The engine lives in the live-clip repo (or any dir via config.scriptPath /
-// VIDEO_UNDERSTAND_SCRIPT env). Default paths mirror this machine's layout;
-// override in the plugin config or env when vendoring elsewhere.
+// 数据流：L0 完全本地；L1/L2 使用 MiMo API 进行视觉分析（帧上传至 MiMo 服务器）。
 
 import { spawn } from 'node:child_process'
 import os from 'node:os'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 export const name = 'video-understand'
 export const inject = ['tools']
 
-const DEFAULT_SCRIPT = path.join(os.homedir(), 'Desktop', 'live-clip-repo', 'understand_video.py')
+// 引擎自包含：相对于本插件的 engine/ 目录
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const DEFAULT_SCRIPT = path.join(__dirname, '..', 'engine', 'understand_video.py')
 
 const OUTPUT_SCHEMA = {
   type: 'object',
@@ -77,7 +78,7 @@ export function apply(ctx, config = {}) {
       '低成本理解一个视频：输入 B站链接 / BV 号 / 本地视频路径，返回摘要+问答（token 压缩 99.95%+）。可选 level 参数升级视觉级（l1/l2）。返回中 suggest_layer=true 表示该视频尚未建完整语义层（base全量+CLIP，一次性2-4min，之后任何问题秒答）——若用户表示还会追问该视频其他问题，主动询问是否建层。' +
       '用户提到"理解这个视频/视频讲了什么/总结视频"或给出视频链接时使用。' +
       '可选 questions 数组自定义要问的问题（默认 3 问：核心内容/亮点/适合人群）。' +
-      '需要 live-clip 仓库（understand_video.py）与模型依赖（见 README，bash install_models.sh 一键装）。',
+      '数据流：L0 完全本地；L1/L2 使用 MiMo API 进行视觉分析（帧上传至 MiMo 服务器）。',
     parameters: {
       type: 'object',
       properties: {
@@ -97,7 +98,7 @@ export function apply(ctx, config = {}) {
         level: {
           type: 'string',
           enum: ['l0', 'l1', 'l2'],
-          description: 'l0=信息层(默认,~0.006元) l1=+3-5帧VLM视觉摘要(+0.0005元) l2=+时间窗密集帧证据',
+          description: 'l0=信息层(默认,~0.006元) l1=+3-5帧VLM视觉摘要(MiMo API,+0.0005元) l2=+时间窗密集帧证据(MiMo API)',
         },
         window: {
           type: 'string',
