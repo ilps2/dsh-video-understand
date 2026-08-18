@@ -24,8 +24,10 @@ BILI = os.environ.get("BILI_DOWNLOAD_SCRIPT",
 _ENGINE_DIR = os.path.dirname(os.path.abspath(__file__))
 AVIS = os.path.join(_ENGINE_DIR, "avis.py")
 ASR = os.path.join(_ENGINE_DIR, "livestream-highlight", "asr.py")
-KEY = os.environ.get("DEEPSEEK_API_KEY", "")
-URL = "https://api.deepseek.com/v1/chat/completions"
+# LLM 配置：优先使用通用变量，向后兼容 DEEPSEEK_API_KEY
+KEY = os.environ.get("LLM_API_KEY") or os.environ.get("DEEPSEEK_API_KEY", "")
+URL = os.environ.get("LLM_API_URL", "https://api.deepseek.com/v1/chat/completions")
+MODEL = os.environ.get("LLM_MODEL", "deepseek-chat")
 DEFAULT_QUESTIONS = [
     "这段视频的核心内容是什么？用 3-5 句话概括。",
     "视频中有哪些关键细节或亮点？",
@@ -37,8 +39,8 @@ def run(cmd, timeout=1800):
 
 def llm(messages, max_tokens=400):
     if not KEY:
-        raise SystemExit("错误: 未设置 DEEPSEEK_API_KEY 环境变量。请运行:\n  export DEEPSEEK_API_KEY='your-key-here'")
-    body = {"model": "deepseek-chat", "messages": messages,
+        raise SystemExit("错误: 未设置 LLM_API_KEY 环境变量。请运行:\n  export LLM_API_KEY='your-key-here'")
+    body = {"model": MODEL, "messages": messages,
             "max_tokens": max_tokens, "temperature": 0.3}
     req = urllib.request.Request(URL, data=json.dumps(body).encode(),
         headers={"Content-Type": "application/json", "Authorization": f"Bearer {KEY}"})
@@ -136,7 +138,7 @@ def transcript_text(avis_dir, limit=500):
 def locate(question, avis_dir, dur, title=""):
     """LLM 定位器：读 tiny 全文 → 候选窗口 + 缺口。返回 (windows, gap, reason)。"""
     full = transcript_text(avis_dir)
-    body = {"model": "deepseek-chat",
+    body = {"model": MODEL,
             "messages": [{"role": "system",
                           "content": "你是视频内容定位器。给你视频语音转写全文（带时间戳）和用户问题，"
                           "找出最可能包含答案的 1-2 个时间段（秒），并判断缺口："
@@ -195,7 +197,7 @@ def locate_visual(question, video_path, avis_dir, workdir, dur, title=""):
         avis_dir2, _ = encode_cached(video_path, workdir, "tiny", use_clip=True)
         avis_dir = avis_dir2
     # 2. LLM 提取英文视觉查询词
-    body = {"model": "deepseek-chat",
+    body = {"model": MODEL,
             "messages": [{"role": "system", "content": "你是视觉检索词提取器。把用户问题转成 2-3 个英文视觉关键词"
                           "（CLIP 语义检索用，覆盖主要视觉元素/动作/场景）。只输出 JSON 数组。"},
                          {"role": "user", "content": f"视频标题: {title or '未知'}\n用户问题: {question}\n"
@@ -289,7 +291,7 @@ def run_visual(level, video, avis_dir, window=None):
         return "", 0.0
 
 def quality_check(question, answer):
-    body = {"model": "deepseek-chat",
+    body = {"model": MODEL,
             "messages": [{"role": "system",
                           "content": "你是严格的质量评估器。回答含「无法确认/识别错误/信息不足/不确定/缺失」等表述时应给低分（<6）；"
                           "用户问具体内容（物品/数量/价格/名称）时，回答缺少具体名称、数量、价格即为不足。"},
