@@ -35,9 +35,9 @@ pip3 install faster-whisper
 
 | 变量 | 必需 | 说明 |
 |---|---|---|
-| `LLM_API_KEY` | ✅ | LLM API 密钥（支持 MiMo / DeepSeek / 任何 OpenAI 兼容 API） |
-| `LLM_API_URL` | ❌ | API endpoint（默认 `https://api.deepseek.com/v1/chat/completions`） |
-| `LLM_MODEL` | ❌ | 模型名（默认 `deepseek-chat`，MiMo 设为 `mimo-v2.5`） |
+| `LLM_API_KEY` | ✅ | LLM API 密钥（MiMo 格式：`sk-xxxxx`） |
+| `LLM_API_URL` | ❌ | API endpoint（默认 `https://api.xiaomimimo.com/v1/chat/completions`） |
+| `LLM_MODEL` | ❌ | 模型名（默认 `mimo-v2.5`） |
 | `VIDEO_UNDERSTAND_PYTHON` | ❌ | Python 解释器路径（默认 `python3`） |
 | `BILI_DOWNLOAD_SCRIPT` | ❌ | bilibili-downloader 脚本路径（下载 B站视频用） |
 

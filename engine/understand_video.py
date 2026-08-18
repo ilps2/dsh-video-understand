@@ -26,8 +26,8 @@ AVIS = os.path.join(_ENGINE_DIR, "avis.py")
 ASR = os.path.join(_ENGINE_DIR, "livestream-highlight", "asr.py")
 # LLM 配置：优先使用通用变量，向后兼容 DEEPSEEK_API_KEY
 KEY = os.environ.get("LLM_API_KEY") or os.environ.get("DEEPSEEK_API_KEY", "")
-URL = os.environ.get("LLM_API_URL", "https://api.deepseek.com/v1/chat/completions")
-MODEL = os.environ.get("LLM_MODEL", "deepseek-chat")
+URL = os.environ.get("LLM_API_URL", "https://api.xiaomimimo.com/v1/chat/completions")
+MODEL = os.environ.get("LLM_MODEL", "mimo-v2.5")
 DEFAULT_QUESTIONS = [
     "这段视频的核心内容是什么？用 3-5 句话概括。",
     "视频中有哪些关键细节或亮点？",
