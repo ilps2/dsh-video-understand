@@ -13,28 +13,45 @@ from pathlib import Path
 from baseline_c_subtitle import load_llm_conf  # 复用同一份 LLM 配置加载
 
 
-def resolve_video_url(target):
-    """返回 (video_url, note)。B站 → yt-dlp 直链；本地文件 → data URI（≤20MB）。"""
+def resolve_video_url(target, workdir):
+    """返回 (video_url, note)。B站直链有 Referer 防盗链，MiMo 服务端拉取会 400，
+    统一下载后转 data URI 内联（≤20MB，超限自动压码到 360p/crf32 再试）。"""
     p = Path(target)
     if p.exists():
-        size_mb = p.stat().st_size / 1e6
-        if size_mb > 20:
-            raise SystemExit(f"本地视频 {size_mb:.0f}MB 超过内联上限（20MB），请改用 B站链接或自行托管后传 URL")
-        b64 = base64.b64encode(p.read_bytes()).decode()
-        return f"data:video/mp4;base64,{b64}", f"本地文件内联 {size_mb:.1f}MB"
-    page = target if target.startswith("http") else f"https://www.bilibili.com/video/{target}"
-    # 取 480p 以下直链（B站 DASH 音视频分离，取视频流即可，MiMo 端只取画面）
-    # 412 = B站风控：依次尝试浏览器 cookie 登录态
-    for cookies in (None, "chrome", "safari", "firefox", "edge"):
-        cmd = ["yt-dlp", "-f", "bv*[height<=480]/b[height<=480]/b", "-g"]
-        if cookies:
-            cmd += ["--cookies-from-browser", cookies]
-        cmd.append(page)
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-        if r.returncode == 0 and r.stdout.strip():
-            note = f"B站 CDN 直链（480p{'，cookie: ' + cookies if cookies else ''}）"
-            return r.stdout.strip().splitlines()[0], note
-    raise SystemExit(f"yt-dlp 取直链失败（含 cookie 重试）: {r.stderr[-300:]}")
+        video = p
+        note = "本地文件"
+    else:
+        page = target if target.startswith("http") else f"https://www.bilibili.com/video/{target}"
+        video = Path(workdir) / "video.mp4"
+        for cookies in (None, "chrome", "safari", "firefox", "edge"):
+            cmd = ["yt-dlp", "-f", "bv*[height<=480]+ba/b[height<=480]/b", "-o", str(video)]
+            if cookies:
+                cmd += ["--cookies-from-browser", cookies]
+            cmd.append(page)
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+            if r.returncode == 0 and video.exists():
+                note = f"B站下载（480p{'，cookie: ' + cookies if cookies else ''}）"
+                break
+        else:
+            raise SystemExit(f"yt-dlp 下载失败（含 cookie 重试）: {r.stderr[-300:]}")
+
+    def to_data_uri(path):
+        b64 = base64.b64encode(path.read_bytes()).decode()
+        return f"data:video/mp4;base64,{b64}"
+
+    size_mb = video.stat().st_size / 1e6
+    if size_mb <= 20:
+        return to_data_uri(video), f"{note}，内联 {size_mb:.1f}MB"
+    # 超限：压码缩小（MiMo 端按 fps 抽帧，低码率不影响理解质量）
+    small = Path(workdir) / "video_small.mp4"
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(video),
+                    "-vf", "scale=640:-2", "-c:v", "libx264", "-crf", "32",
+                    "-preset", "fast", "-c:a", "aac", "-b:a", "64k", str(small)],
+                   check=True, timeout=600)
+    small_mb = small.stat().st_size / 1e6
+    if small_mb > 20:
+        raise SystemExit(f"压码后仍 {small_mb:.0f}MB 超过内联上限（20MB），请改用本地短片段")
+    return to_data_uri(small), f"{note}，压码 360p {size_mb:.0f}→{small_mb:.1f}MB 内联"
 
 
 def ask_native(key, url, model, video_url, questions, fps):
@@ -65,9 +82,11 @@ def main():
     questions = args.ask or ["视频核心内容是什么", "有哪些亮点", "适合什么人看"]
 
     key, url, model = load_llm_conf()
-    video_url, note = resolve_video_url(args.target)
-    print(f"[E组] 视频来源: {note}；MiMo 抽帧 {args.fps}fps", file=sys.stderr)
-    answer, usage = ask_native(key, url, model, video_url, questions, args.fps)
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        video_url, note = resolve_video_url(args.target, td)
+        print(f"[E组] 视频来源: {note}；MiMo 抽帧 {args.fps}fps", file=sys.stderr)
+        answer, usage = ask_native(key, url, model, video_url, questions, args.fps)
     in_tok = usage.get("prompt_tokens", 0)
     out_tok = usage.get("completion_tokens", 0)
     # MiMo 价目：输入(缓存命中) ¥0.02/百万，输入(未命中) ¥1/百万，输出 ¥2/百万
