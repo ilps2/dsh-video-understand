@@ -943,7 +943,8 @@ def build_fused_prompt(avis_dir: Path, with_tracks: bool = True) -> str:
 # ── Encode: extract all signals into AVIS format ──────────────────
 
 def encode_video(video_path: Path, output_dir: Path = None,
-                 asr_model: str = "base", fps_target: str = "auto",
+                 asr_model: str = "base", asr_backend: str = "whisper",
+                 fps_target: str = "auto",
                  skip_mv: bool = False, skip_asr: bool = False,
                  use_clip: bool = False,
                  use_obj_tracks: bool = False,
@@ -952,6 +953,9 @@ def encode_video(video_path: Path, output_dir: Path = None,
     """
     Encode a single video into the AVIS format.
     Steps: probe → MV extraction → ASR → scene classification → scoring → manifest.
+    
+    Args:
+        asr_backend: ASR 后端 ("whisper" | "sensevoice")
     """
     # Prevent Hermes venv PYTHONPATH contamination
     os.environ.pop('PYTHONPATH', None)
@@ -1010,11 +1014,25 @@ def encode_video(video_path: Path, output_dir: Path = None,
     if skip_asr and transcript_path.exists():
         print(f"  Using existing {transcript_path}")
     else:
-        # faster-whisper doesn't support MPS — let asr.py auto-detect (falls back to CPU)
-        asr_device = "auto" if device in ("mps", "auto") else device
-        r = run([sys.executable, str(BASE / "livestream-highlight" / "asr.py"),
-                 "--video", str(video), "--out", str(transcript_path),
-                 "--model", asr_model, "--device", asr_device], desc="ASR", timeout=900)
+        # 根据 asr_backend 选择 ASR 后端
+        if asr_backend == "sensevoice":
+            # 使用 SenseVoice ASR
+            try:
+                from engine.asr_sensevoice import SenseVoiceASR
+                asr = SenseVoiceASR(device=device)
+                segments = asr.transcribe_video(str(video), str(transcript_path), asr_model)
+                print(f"  SenseVoice ASR: {len(segments)} segments")
+            except Exception as e:
+                print(f"  ⚠ SenseVoice ASR 失败: {e}")
+                print("  回退到 faster-whisper...")
+                asr_backend = "whisper"
+        
+        if asr_backend == "whisper":
+            # faster-whisper doesn't support MPS — let asr.py auto-detect (falls back to CPU)
+            asr_device = "auto" if device in ("mps", "auto") else device
+            r = run([sys.executable, str(BASE / "livestream-highlight" / "asr.py"),
+                     "--video", str(video), "--out", str(transcript_path),
+                     "--model", asr_model, "--device", asr_device], desc="ASR", timeout=900)
 
     segs = []
     n_segs = 0
