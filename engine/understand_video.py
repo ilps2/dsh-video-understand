@@ -39,6 +39,11 @@ BILI = os.environ.get("BILI_DOWNLOAD_SCRIPT",
 _ENGINE_DIR = os.path.dirname(os.path.abspath(__file__))
 AVIS = os.path.join(_ENGINE_DIR, "avis.py")
 ASR = os.path.join(_ENGINE_DIR, "livestream-highlight", "asr.py")
+# 脚本直跑（python engine/understand_video.py）时把仓库根目录加入 sys.path，
+# 使 engine 包内模块（cache_content 等）可以 from engine.xxx import
+_REPO_ROOT = os.path.dirname(_ENGINE_DIR)
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 # LLM 配置：环境变量 → DSH credentials 文件 → 默认值
 def _load_llm_config():
     """Load LLM API key: env var → DSH credentials file → empty."""

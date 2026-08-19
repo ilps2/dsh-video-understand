@@ -6,3 +6,4 @@
 faster-whisper>=1.0,<2.0      # ASR 转写
 opencv-python-headless>=4.8   # 场景检测 / 运动轨迹（headless 避免 GUI 依赖）
 yt-dlp>=2024.8                # B站视频下载
+xxhash>=3.4                  # cache_content 内容哈希
