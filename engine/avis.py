@@ -1054,6 +1054,23 @@ def encode_video(video_path: Path, output_dir: Path = None,
             asr_model = retry_model  # manifest 记录实际生效模型
         print(f"  retry: {n_segs} segments")
 
+    # --- Step 3.5: OCR (画面文字提取) ---
+    ocr_path = avis_dir / "ocr_text.jsonl"
+    n_ocr_texts = 0
+    print("\n[3.5/6] Extracting on-screen text (OCR)...")
+    try:
+        from engine.ocr_frame import FrameOCR
+        ocr = FrameOCR(sample_fps=0.5)  # 每 2 秒抽一帧
+        ocr_output = ocr.extract(str(video), str(avis_dir))
+        if ocr_path.exists():
+            with open(ocr_path, "r", encoding="utf-8") as f:
+                n_ocr_texts = sum(1 for _ in f)
+        print(f"  {n_ocr_texts} text segments extracted")
+    except ImportError:
+        print("  ⚠ PaddleOCR 未安装，跳过 OCR")
+    except Exception as e:
+        print(f"  ⚠ OCR 提取失败: {e}")
+
     # --- Step 4: Scene classification ---
     scenes_path = avis_dir / "scenes.csv"
     n_boundaries = 0
