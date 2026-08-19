@@ -24,11 +24,17 @@ def resolve_video_url(target):
         return f"data:video/mp4;base64,{b64}", f"本地文件内联 {size_mb:.1f}MB"
     page = target if target.startswith("http") else f"https://www.bilibili.com/video/{target}"
     # 取 480p 以下直链（B站 DASH 音视频分离，取视频流即可，MiMo 端只取画面）
-    r = subprocess.run(["yt-dlp", "-f", "bv*[height<=480]/b[height<=480]/b", "-g", page],
-                       capture_output=True, text=True, timeout=120)
-    if r.returncode != 0 or not r.stdout.strip():
-        raise SystemExit(f"yt-dlp 取直链失败: {r.stderr[-300:]}")
-    return r.stdout.strip().splitlines()[0], "B站 CDN 直链（480p）"
+    # 412 = B站风控：依次尝试浏览器 cookie 登录态
+    for cookies in (None, "chrome", "safari", "firefox", "edge"):
+        cmd = ["yt-dlp", "-f", "bv*[height<=480]/b[height<=480]/b", "-g"]
+        if cookies:
+            cmd += ["--cookies-from-browser", cookies]
+        cmd.append(page)
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        if r.returncode == 0 and r.stdout.strip():
+            note = f"B站 CDN 直链（480p{'，cookie: ' + cookies if cookies else ''}）"
+            return r.stdout.strip().splitlines()[0], note
+    raise SystemExit(f"yt-dlp 取直链失败（含 cookie 重试）: {r.stderr[-300:]}")
 
 
 def ask_native(key, url, model, video_url, questions, fps):
