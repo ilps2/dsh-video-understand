@@ -137,18 +137,31 @@ def encode(video_path, workdir, asr_model="tiny", sub="avis_tiny"):
     return os.path.join(out, stem)
 
 def encode_cached(video_path, workdir, asr_model="tiny", use_clip=False):
-    """带缓存的 encode：按视频 hash 分层缓存（tiny/base/base+clip）。
-    同一视频二次调用命中缓存，跳过重新提取（语义层复用）。"""
-    import hashlib
-    st = os.stat(video_path)
-    h = hashlib.md5(f"{video_path}:{st.st_size}:{int(st.st_mtime)}".encode()).hexdigest()[:10]
+    """带缓存的 encode：按视频内容哈希分层缓存（tiny/base/base+clip）。
+    同一视频二次调用命中缓存，跳过重新提取（语义层复用）。
+    
+    使用 ContentAddressableCache 实现跨路径/跨设备缓存复用。
+    """
+    from engine.cache_content import ContentAddressableCache
+    
+    # 创建缓存实例
+    cache = ContentAddressableCache(cache_root=os.path.join(workdir, "content_cache"))
+    
+    # 检查缓存是否命中
+    cached_avis = cache.get(video_path)
+    if cached_avis and os.path.exists(os.path.join(cached_avis, "avis.json")):
+        tag = asr_model + ("_clip" if use_clip else "")
+        print(f"♻️  语义层缓存命中: {tag}（内容哈希）", flush=True)
+        cache.close()
+        return cached_avis, cache.compute_hash(video_path)
+    
+    # 缓存未命中，执行 encode
     tag = asr_model + ("_clip" if use_clip else "")
-    cache_dir = os.path.join(workdir, "avis_cache", h, tag)
+    content_hash = cache.compute_hash(video_path)
+    cache_dir = os.path.join(workdir, "avis_cache", content_hash, tag)
     stem = os.path.splitext(os.path.basename(video_path))[0] + "_avis"
     avis_dir = os.path.join(cache_dir, stem)
-    if os.path.exists(os.path.join(avis_dir, "avis.json")):
-        print(f"♻️  语义层缓存命中: {tag}（{os.path.basename(cache_dir)}）", flush=True)
-        return avis_dir, h
+    
     os.makedirs(cache_dir, exist_ok=True)
     cmd = [PY, AVIS, "encode", video_path, "-o", cache_dir, "--obj-tracks",
            "--asr-model", asr_model, "--skip-mv"]
@@ -156,9 +169,15 @@ def encode_cached(video_path, workdir, asr_model="tiny", use_clip=False):
         cmd.append("--clip")
     r = run(cmd)
     if r.returncode != 0:
+        cache.close()
         raise SystemExit(f"encode 失败: {r.stderr[-400:]}")
+    
+    # 写入缓存
+    cache.put(video_path, avis_dir)
+    cache.close()
+    
     print(f"✅ {tag} 语义层已构建并缓存", flush=True)
-    return avis_dir, h
+    return avis_dir, content_hash
 
 def layer_cache_status(video_path, workdir):
     """检查视频已有哪些语义层缓存。返回 (has_tiny, has_full)。"""
