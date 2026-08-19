@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AVIS L1/L2 视觉级理解：按需抽帧 + VLM（qwen3-vl-flash）
+AVIS L1/L2 视觉级理解：按需抽帧 + VLM（MiMo v2.5 多模态）
 
 L1 视觉摘要：信息层（L0）盲区补充 —— 颜色/姿态/衣着/型号/文字
   从 AVIS 目录选 3-5 个代表时间点（轨迹活跃 + 场景边界）→ 抽帧 → 多图合并 VLM → 画面摘要
@@ -11,19 +11,45 @@ L2 时间窗证据：对指定片段密集抽帧 → 时间线证据链（"第X�
   visual_level.py l2 <video> <avis_dir> [--window 10-30] [--step 2] [--json]
   visual_level.py l2 <video> <avis_dir> --window auto   # 自动选轨迹最活跃 30s
 
-成本: qwen3-vl-flash ≈ 253 tok/帧(图) → L1 单次 ≈ 0.001 元
+⚠️ 数据流：L1/L2 级别会将视频帧（JPEG 编码）发送至 MiMo API 进行视觉理解。
+   帧数据仅用于单次 VLM 推理，不会被存储或用于训练。
+成本: MiMo v2.5 ≈ 253 tok/帧(图) → L1 单次 ≈ 0.001 元
 """
 import argparse, base64, json, os, subprocess, sys, urllib.request
-import os
-import os
 import ssl
 # 系统代理(Clash MITM)用自签名证书 → 指向 macOS 系统证书链（双保险）
 if os.path.exists("/etc/ssl/cert.pem"):
     os.environ.setdefault("SSL_CERT_FILE", "/etc/ssl/cert.pem")
     ssl._create_default_https_context = lambda: ssl.create_default_context(cafile="/etc/ssl/cert.pem")
-DASHSCOPE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
-API_KEY = os.environ.get("DASHSCOPE_API_KEY", "")
-MODEL = os.environ.get("VLM_MODEL", "qwen3-vl-flash")
+
+# VLM 配置：环境变量 → DSH credentials 文件 → 默认值
+def _load_vlm_config():
+    key = os.environ.get("LLM_API_KEY") or os.environ.get("DEEPSEEK_API_KEY", "")
+    url = os.environ.get("LLM_API_URL", "https://api.xiaomimimo.com/v1/chat/completions")
+    model = os.environ.get("VLM_MODEL", "mimo-v2.5")
+    if key:
+        return key, url, model
+    # Fallback: DSH credentials file
+    cred = os.path.expanduser("~/.dsh/.credentials.yaml")
+    if os.path.exists(cred):
+        try:
+            keys = {}
+            with open(cred) as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("XIAOMI_API_KEY:"):
+                        keys["xiaomi"] = line.split(":", 1)[1].strip()
+                    elif line.startswith("DEEPSEEK_API_KEY:"):
+                        keys["deepseek"] = line.split(":", 1)[1].strip()
+            if "xiaomi" in keys:
+                return keys["xiaomi"], "https://api.xiaomimimo.com/v1/chat/completions", "mimo-v2.5"
+            if "deepseek" in keys:
+                return keys["deepseek"], "https://api.deepseek.com/v1/chat/completions", "deepseek-chat"
+        except Exception:
+            pass
+    return "", url, model
+
+API_KEY, API_URL, MODEL = _load_vlm_config()
 
 def run(cmd):
     return subprocess.run(cmd, capture_output=True, text=True)
@@ -38,9 +64,9 @@ def extract_frame(video, t, out):
          "-frames:v", "1", "-q:v", "3", out])
 
 def vlm_frames(frame_paths, question):
-    """多图合并一次 VLM 调用（⚠️ 帧将上传至阿里云 DashScope）。"""
+    """多图合并一次 VLM 调用（⚠️ 帧将上传至 VLM 服务器进行视觉分析）。"""
     if not API_KEY:
-        raise SystemExit("错误: 未设置 DASHSCOPE_API_KEY 环境变量。请运行:\n  export DASHSCOPE_API_KEY='your-key-here'")
+        raise SystemExit("错误: 未设置 LLM_API_KEY 环境变量。请运行:\n  export LLM_API_KEY='your-key-here'")
     content = []
     for p in frame_paths:
         b64 = base64.b64encode(open(p, "rb").read()).decode()
@@ -48,12 +74,14 @@ def vlm_frames(frame_paths, question):
                         "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
     content.append({"type": "text", "text": question})
     body = {"model": MODEL, "messages": [{"role": "user", "content": content}],
-            "max_tokens": 400, "temperature": 0.3}
-    req = urllib.request.Request(DASHSCOPE_URL, data=json.dumps(body).encode(),
+            "max_tokens": 2048, "temperature": 0.3}
+    req = urllib.request.Request(API_URL, data=json.dumps(body).encode(),
         headers={"Content-Type": "application/json", "Authorization": f"Bearer {API_KEY}"})
     with urllib.request.urlopen(req, timeout=120) as resp:
         r = json.loads(resp.read())
     msg = r["choices"][0]["message"]["content"]
+    if isinstance(msg, list):
+        msg = " ".join(msg)
     u = r.get("usage", {})
     return msg, u.get("prompt_tokens", 0), u.get("completion_tokens", 0)
 
