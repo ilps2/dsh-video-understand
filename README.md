@@ -35,13 +35,13 @@ pip3 install faster-whisper
 
 | 变量 | 必需 | 说明 |
 |---|---|---|
-| `LLM_API_KEY` | ✅ | LLM API 密钥（MiMo 格式：`sk-xxxxx`） |
+| `LLM_API_KEY` | ✅* | LLM API 密钥（默认 MiMo：`sk-xxxxx`） |
 | `LLM_API_URL` | ❌ | API endpoint（默认 `https://api.xiaomimimo.com/v1/chat/completions`） |
 | `LLM_MODEL` | ❌ | 模型名（默认 `mimo-v2.5`） |
-| `VIDEO_UNDERSTAND_PYTHON` | ❌ | Python 解释器路径（默认 `python3`） |
+| `VIDEO_UNDERSTAND_PYTHON` | ❌ | Python 解释器路径（自动检测有依赖的 Python） |
 | `BILI_DOWNLOAD_SCRIPT` | ❌ | bilibili-downloader 脚本路径（下载 B站视频用） |
 
-> 💡 向后兼容：`DEEPSEEK_API_KEY` 仍可使用，但推荐迁移到 `LLM_API_KEY`。
+> \* 未设置 `LLM_API_KEY` 时，自动从 `~/.dsh/.credentials.yaml` 读取（优先 `XIAOMI_API_KEY`，兼容 `DEEPSEEK_API_KEY`）。一个 key 搞定。
 
 ## 工具
 

@@ -17,17 +17,57 @@ import ssl
 if os.path.exists("/etc/ssl/cert.pem"):
     os.environ.setdefault("SSL_CERT_FILE", "/etc/ssl/cert.pem")
     ssl._create_default_https_context = lambda: ssl.create_default_context(cafile="/etc/ssl/cert.pem")
-PY = os.environ.get("VIDEO_UNDERSTAND_PYTHON", "python3")
+def _detect_python():
+    """Auto-detect Python with dependencies: prefer framework 3.13 (has all deps)."""
+    env = os.environ.get("VIDEO_UNDERSTAND_PYTHON")
+    if env:
+        return env
+    candidates = [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "python3",
+    ]
+    for p in candidates:
+        if "/" in p and not os.path.exists(p):
+            continue
+        return p
+    return "python3"
+
+PY = _detect_python()
 BILI = os.environ.get("BILI_DOWNLOAD_SCRIPT",
                       os.path.expanduser("~/.agents/skills/bilibili-downloader/scripts/bili_download.py"))
 # 引擎自包含路径（相对于本文件）
 _ENGINE_DIR = os.path.dirname(os.path.abspath(__file__))
 AVIS = os.path.join(_ENGINE_DIR, "avis.py")
 ASR = os.path.join(_ENGINE_DIR, "livestream-highlight", "asr.py")
-# LLM 配置：优先使用通用变量，向后兼容 DEEPSEEK_API_KEY
-KEY = os.environ.get("LLM_API_KEY") or os.environ.get("DEEPSEEK_API_KEY", "")
-URL = os.environ.get("LLM_API_URL", "https://api.xiaomimimo.com/v1/chat/completions")
-MODEL = os.environ.get("LLM_MODEL", "mimo-v2.5")
+# LLM 配置：环境变量 → DSH credentials 文件 → 默认值
+def _load_llm_config():
+    """Load LLM API key: env var → DSH credentials file → empty."""
+    key = os.environ.get("LLM_API_KEY") or os.environ.get("DEEPSEEK_API_KEY", "")
+    url = os.environ.get("LLM_API_URL", "https://api.xiaomimimo.com/v1/chat/completions")
+    model = os.environ.get("LLM_MODEL", "mimo-v2.5")
+    if key:
+        return key, url, model
+    # Fallback: DSH credentials file (~/.dsh/.credentials.yaml)
+    cred = os.path.expanduser("~/.dsh/.credentials.yaml")
+    if os.path.exists(cred):
+        try:
+            keys = {}
+            with open(cred) as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("XIAOMI_API_KEY:"):
+                        keys["xiaomi"] = line.split(":", 1)[1].strip()
+                    elif line.startswith("DEEPSEEK_API_KEY:"):
+                        keys["deepseek"] = line.split(":", 1)[1].strip()
+            if "xiaomi" in keys:
+                return keys["xiaomi"], "https://api.xiaomimimo.com/v1/chat/completions", "mimo-v2.5"
+            if "deepseek" in keys:
+                return keys["deepseek"], "https://api.deepseek.com/v1/chat/completions", "deepseek-chat"
+        except Exception:
+            pass
+    return "", url, model
+
+KEY, URL, MODEL = _load_llm_config()
 DEFAULT_QUESTIONS = [
     "这段视频的核心内容是什么？用 3-5 句话概括。",
     "视频中有哪些关键细节或亮点？",
@@ -37,7 +77,7 @@ DEFAULT_QUESTIONS = [
 def run(cmd, timeout=1800):
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
 
-def llm(messages, max_tokens=400):
+def llm(messages, max_tokens=800):
     if not KEY:
         raise SystemExit("错误: 未设置 LLM_API_KEY 环境变量。请运行:\n  export LLM_API_KEY='your-key-here'")
     body = {"model": MODEL, "messages": messages,
@@ -70,7 +110,15 @@ def fetch_title(url_or_bv):
 
 def download(url_or_bv, outdir):
     print(f"⬇️  下载 {url_or_bv} → 360p...", flush=True)
-    r = run([PY, BILI, "download", url_or_bv, "--quality", "360", "-o", outdir])
+    # Full URLs (including bangumi): use yt-dlp directly
+    if url_or_bv.strip().lower().startswith(("http://", "https://")):
+        r = run([PY, "-m", "yt_dlp",
+                 "-f", "worst[ext=mp4]/worst",
+                 "--no-playlist",
+                 "-o", os.path.join(outdir, "%(title)s.%(ext)s"),
+                 url_or_bv])
+    else:
+        r = run([PY, BILI, "download", url_or_bv, "--quality", "360", "-o", outdir])
     if r.returncode != 0:
         raise SystemExit(f"下载失败: {r.stderr[-300:]}")
     mp4s = sorted(glob.glob(os.path.join(outdir, "*.mp4")), key=os.path.getmtime)
@@ -147,7 +195,7 @@ def locate(question, avis_dir, dur, title=""):
                           "content": f"视频标题: {title or '未知'}\n用户问题: {question}\n视频时长: {int(dur)}s\n\n语音转写全文:\n{full}\n\n"
                           "输出 JSON: {\"windows\": [\"30-90\"], \"gap\": \"asr|visual|none\", \"reason\": \"20字内说明\"}\n"
                           "windows 是 1-2 个时间段（秒，闭区间），gap 单选。"}],
-            "max_tokens": 120, "temperature": 0}
+            "max_tokens": 600, "temperature": 0}
     req = urllib.request.Request(URL, data=json.dumps(body).encode(),
         headers={"Content-Type": "application/json", "Authorization": f"Bearer {KEY}"})
     with urllib.request.urlopen(req, timeout=90) as resp:
@@ -202,7 +250,7 @@ def locate_visual(question, video_path, avis_dir, workdir, dur, title=""):
                           "（CLIP 语义检索用，覆盖主要视觉元素/动作/场景）。只输出 JSON 数组。"},
                          {"role": "user", "content": f"视频标题: {title or '未知'}\n用户问题: {question}\n"
                           "输出: [\"keyword1\", \"keyword2\", \"keyword3\"]"}],
-            "max_tokens": 80, "temperature": 0}
+            "max_tokens": 400, "temperature": 0}
     req = urllib.request.Request(URL, data=json.dumps(body).encode(),
         headers={"Content-Type": "application/json", "Authorization": f"Bearer {KEY}"})
     with urllib.request.urlopen(req, timeout=60) as resp:
@@ -300,7 +348,7 @@ def quality_check(question, answer):
                           "评估回答的信息充分度（0-10，<7 为不足）和主要缺口"
                           "（asr=语音转写不清/缺失, visual=缺画面细节, none=已充分, other=其他）。"
                           "严格输出 JSON: {\"score\": 0-10, \"gap\": \"asr|visual|none|other\"}"}],
-            "max_tokens": 60, "temperature": 0}
+            "max_tokens": 300, "temperature": 0}
     req = urllib.request.Request(URL, data=json.dumps(body).encode(),
         headers={"Content-Type": "application/json", "Authorization": f"Bearer {KEY}"})
     with urllib.request.urlopen(req, timeout=60) as resp:
@@ -410,7 +458,7 @@ def main():
         print(f"🤖 回答（第 {rounds + 1} 轮）...", flush=True)
         msg, usage = llm([{"role": "system", "content": sys_msg},
                           {"role": "user", "content": p + visual_note + "\n\n" + q_block +
-                           "\n\n请按 '问题N: 回答' 格式逐条回答。"}], max_tokens=800)
+                           "\n\n请按 '问题N: 回答' 格式逐条回答。"}], max_tokens=1200)
         c, h, m = calc_cost(usage)
         llm_cost += c; total_hit += h; total_miss += m; total_out += usage.get("completion_tokens", 0)
         answers = []

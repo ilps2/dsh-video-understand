@@ -68,9 +68,25 @@ function runScript(python, script, args, signal) {
   })
 }
 
+// Auto-detect Python with dependencies: prefer framework 3.13 (has all deps),
+// fall back to system python3.
+import { existsSync } from 'node:fs'
+function detectPython() {
+  if (process.env.VIDEO_UNDERSTAND_PYTHON) return process.env.VIDEO_UNDERSTAND_PYTHON
+  const candidates = [
+    '/Library/Frameworks/Python.framework/Versions/3.13/bin/python3',
+    'python3',
+  ]
+  for (const p of candidates) {
+    if (p.includes('/') && !existsSync(p)) continue
+    return p
+  }
+  return 'python3'
+}
+
 export function apply(ctx, config = {}) {
   const script = config.scriptPath || process.env.VIDEO_UNDERSTAND_SCRIPT || DEFAULT_SCRIPT
-  const python = config.pythonPath || process.env.VIDEO_UNDERSTAND_PYTHON || 'python3'
+  const python = config.pythonPath || detectPython()
 
   const tool = (toolName) => ({
     name: toolName,
