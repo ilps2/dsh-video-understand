@@ -77,7 +77,7 @@ DEFAULT_QUESTIONS = [
 def run(cmd, timeout=1800):
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
 
-def llm(messages, max_tokens=800):
+def llm(messages, max_tokens=16384):
     if not KEY:
         raise SystemExit("错误: 未设置 LLM_API_KEY 环境变量。请运行:\n  export LLM_API_KEY='your-key-here'")
     body = {"model": MODEL, "messages": messages,
@@ -195,7 +195,7 @@ def locate(question, avis_dir, dur, title=""):
                           "content": f"视频标题: {title or '未知'}\n用户问题: {question}\n视频时长: {int(dur)}s\n\n语音转写全文:\n{full}\n\n"
                           "输出 JSON: {\"windows\": [\"30-90\"], \"gap\": \"asr|visual|none\", \"reason\": \"20字内说明\"}\n"
                           "windows 是 1-2 个时间段（秒，闭区间），gap 单选。"}],
-            "max_tokens": 600, "temperature": 0}
+            "max_tokens": 2048, "temperature": 0}
     req = urllib.request.Request(URL, data=json.dumps(body).encode(),
         headers={"Content-Type": "application/json", "Authorization": f"Bearer {KEY}"})
     with urllib.request.urlopen(req, timeout=90) as resp:
@@ -250,7 +250,7 @@ def locate_visual(question, video_path, avis_dir, workdir, dur, title=""):
                           "（CLIP 语义检索用，覆盖主要视觉元素/动作/场景）。只输出 JSON 数组。"},
                          {"role": "user", "content": f"视频标题: {title or '未知'}\n用户问题: {question}\n"
                           "输出: [\"keyword1\", \"keyword2\", \"keyword3\"]"}],
-            "max_tokens": 400, "temperature": 0}
+            "max_tokens": 1024, "temperature": 0}
     req = urllib.request.Request(URL, data=json.dumps(body).encode(),
         headers={"Content-Type": "application/json", "Authorization": f"Bearer {KEY}"})
     with urllib.request.urlopen(req, timeout=60) as resp:
@@ -348,7 +348,7 @@ def quality_check(question, answer):
                           "评估回答的信息充分度（0-10，<7 为不足）和主要缺口"
                           "（asr=语音转写不清/缺失, visual=缺画面细节, none=已充分, other=其他）。"
                           "严格输出 JSON: {\"score\": 0-10, \"gap\": \"asr|visual|none|other\"}"}],
-            "max_tokens": 300, "temperature": 0}
+            "max_tokens": 1024, "temperature": 0}
     req = urllib.request.Request(URL, data=json.dumps(body).encode(),
         headers={"Content-Type": "application/json", "Authorization": f"Bearer {KEY}"})
     with urllib.request.urlopen(req, timeout=60) as resp:
@@ -458,7 +458,7 @@ def main():
         print(f"🤖 回答（第 {rounds + 1} 轮）...", flush=True)
         msg, usage = llm([{"role": "system", "content": sys_msg},
                           {"role": "user", "content": p + visual_note + "\n\n" + q_block +
-                           "\n\n请按 '问题N: 回答' 格式逐条回答。"}], max_tokens=1200)
+                           "\n\n请按 '问题N: 回答' 格式逐条回答。"}], max_tokens=16384)
         c, h, m = calc_cost(usage)
         llm_cost += c; total_hit += h; total_miss += m; total_out += usage.get("completion_tokens", 0)
         answers = []
