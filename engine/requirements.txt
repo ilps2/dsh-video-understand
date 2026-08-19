@@ -1,0 +1,8 @@
+# dsh-video-understand L0 核心依赖（默认级别必需，约 200-300MB）
+# 安装: pip install -r engine/requirements.txt
+# 国内: pip install -r engine/requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+# Python 3.9 - 3.13
+
+faster-whisper>=1.0,<2.0      # ASR 转写
+opencv-python-headless>=4.8   # 场景检测 / 运动轨迹（headless 避免 GUI 依赖）
+yt-dlp>=2024.8                # B站视频下载

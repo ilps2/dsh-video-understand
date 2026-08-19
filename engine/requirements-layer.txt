@@ -1,0 +1,9 @@
+# dsh-video-understand 语义层依赖（可选 — 仅"建完整语义层"(suggest_layer)时需要）
+# 体积较大（torch 约 2GB），首次建层前再装即可：
+#   pip install -r engine/requirements-layer.txt
+# 国内: pip install -r engine/requirements-layer.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+torch>=2.0                    # CLIP / 设备检测
+transformers>=4.40            # openai/clip-vit-base-patch32
+pillow>=10.0
+ultralytics>=8.2              # YOLO 对象轨迹

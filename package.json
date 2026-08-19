@@ -12,12 +12,18 @@
       "patch": "./cordis.patch.yml"
     }
   },
+  "bin": {
+    "dsh-video-understand": "./bin/doctor.mjs"
+  },
   "scripts": {
     "test:tools": "node dsh/index.js --self-test",
-    "install-engine": "pip3 install -r engine/requirements.txt 2>/dev/null || true"
+    "doctor": "node bin/doctor.mjs",
+    "install-engine": "python3 -m pip install -r engine/requirements.txt",
+    "install-engine-layer": "python3 -m pip install -r engine/requirements-layer.txt"
   },
   "license": "MIT",
   "files": [
+    "bin/",
     "dsh/",
     "engine/",
     "skills/",

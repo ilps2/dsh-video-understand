@@ -68,20 +68,16 @@ function runScript(python, script, args, signal) {
   })
 }
 
-// Auto-detect Python with dependencies: prefer framework 3.13 (has all deps),
-// fall back to system python3.
+// Auto-detect Python: env override → plugin-local venv (.venv) → system
+// python3/python on PATH. Cross-platform (macOS/Linux/Windows).
 import { existsSync } from 'node:fs'
 function detectPython() {
   if (process.env.VIDEO_UNDERSTAND_PYTHON) return process.env.VIDEO_UNDERSTAND_PYTHON
-  const candidates = [
-    '/Library/Frameworks/Python.framework/Versions/3.13/bin/python3',
-    'python3',
-  ]
-  for (const p of candidates) {
-    if (p.includes('/') && !existsSync(p)) continue
-    return p
-  }
-  return 'python3'
+  const venvPy = process.platform === 'win32'
+    ? path.join(__dirname, '..', '.venv', 'Scripts', 'python.exe')
+    : path.join(__dirname, '..', '.venv', 'bin', 'python3')
+  if (existsSync(venvPy)) return venvPy
+  return process.platform === 'win32' ? 'python' : 'python3'
 }
 
 export function apply(ctx, config = {}) {

@@ -35,8 +35,19 @@ description: 低成本视频理解（token 压缩 99.95%+）。用户要求理�
 
 ## 前置依赖
 
-- live-clip 仓库（understand_video.py）：`~/Desktop/live-clip-repo` 或 `VIDEO_UNDERSTAND_SCRIPT` 环境变量
-- 模型依赖：`bash install_models.sh`（pip 清华镜像 + hf-mirror/gh-proxy 国内镜像，30 秒）
+引擎已内含在插件 `engine/` 目录，无需克隆外部仓库。环境异常时引导用户运行自检：
+
+```bash
+npx dsh-video-understand doctor        # 逐项检测 + 给出修复命令
+# 或 node <插件目录>/bin/doctor.mjs --json  # 机器可读，agent 可直接解析
+```
+
+常见修复（doctor 会按平台输出对应命令）：
+
+- Python 依赖缺失：`pip install -r engine/requirements.txt`（语义层另需 `requirements-layer.txt`，体积大约 2GB，可选）
+- ffmpeg 缺失：macOS `brew install ffmpeg` / Ubuntu `sudo apt install ffmpeg`
+- API key 缺失：`export LLM_API_KEY=sk-xxxxx`，或写入 `~/.dsh/.credentials.yaml` 的 `XIAOMI_API_KEY`
+- 自定义 Python 解释器：设置 `VIDEO_UNDERSTAND_PYTHON` 环境变量
 
 ## 注意事项
 
