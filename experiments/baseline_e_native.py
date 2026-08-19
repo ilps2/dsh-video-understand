@@ -42,16 +42,17 @@ def resolve_video_url(target, workdir):
     size_mb = video.stat().st_size / 1e6
     if size_mb <= 20:
         return to_data_uri(video), f"{note}，内联 {size_mb:.1f}MB"
-    # 超限：压码缩小（MiMo 端按 fps 抽帧，低码率不影响理解质量）
-    small = Path(workdir) / "video_small.mp4"
-    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(video),
-                    "-vf", "scale=640:-2", "-c:v", "libx264", "-crf", "32",
-                    "-preset", "fast", "-c:a", "aac", "-b:a", "64k", str(small)],
-                   check=True, timeout=600)
-    small_mb = small.stat().st_size / 1e6
-    if small_mb > 20:
-        raise SystemExit(f"压码后仍 {small_mb:.0f}MB 超过内联上限（20MB），请改用本地短片段")
-    return to_data_uri(small), f"{note}，压码 360p {size_mb:.0f}→{small_mb:.1f}MB 内联"
+    # 超限：逐级压码（高动态视频如街舞压缩率低，需要更狠的档位）
+    for width, crf in ((640, 32), (480, 36), (384, 40)):
+        small = Path(workdir) / f"video_small_{width}.mp4"
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(video),
+                        "-vf", f"scale={width}:-2", "-c:v", "libx264", "-crf", str(crf),
+                        "-preset", "fast", "-c:a", "aac", "-b:a", "48k", str(small)],
+                       check=True, timeout=600)
+        small_mb = small.stat().st_size / 1e6
+        if small_mb <= 20:
+            return to_data_uri(small), f"{note}，压码 {width}p/crf{crf} {size_mb:.0f}→{small_mb:.1f}MB 内联"
+    raise SystemExit(f"压码到 384p/crf40 仍 {small_mb:.0f}MB 超过内联上限（20MB），请改用本地短片段")
 
 
 def ask_native(key, url, model, video_url, questions, fps):
