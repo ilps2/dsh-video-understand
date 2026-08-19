@@ -1,0 +1,85 @@
+{
+  "validation_date": "2026-08-20T04:30:00+08:00",
+  "project": "dsh-video-understand",
+  "version": "0.5.0",
+  "validation_scope": "全链路修复验证",
+  
+  "commands_executed": [
+    {
+      "command": "python3 engine/understand_video.py test/fixtures/red-3s-noaudio.mp4 --no-download --json",
+      "exit_code": 0,
+      "description": "无音频视频测试"
+    },
+    {
+      "command": "python3 -m pytest test/test_schema.py test/test_pipeline.py",
+      "exit_code": 0,
+      "description": "Schema 和 Pipeline 测试"
+    },
+    {
+      "command": "python3 engine/avis.py encode test/fixtures/red-3s-noaudio.mp4 -o /tmp/dsh-video-repair-validation --skip-mv --asr-model tiny",
+      "exit_code": 0,
+      "description": "AVIS encode 测试"
+    }
+  ],
+  
+  "test_results": {
+    "total_tests": 46,
+    "passed": 46,
+    "failed": 0,
+    "skipped": 0
+  },
+  
+  "transcript_example": {
+    "video": "red-3s-noaudio.mp4",
+    "segments": 0,
+    "note": "无音频视频，正确返回空 transcript"
+  },
+  
+  "ocr_status": {
+    "installed": false,
+    "fallback": "跳过 OCR，不影响主流程"
+  },
+  
+  "vlm_status": {
+    "installed": false,
+    "fallback": "使用云 VLM (MiMo API)"
+  },
+  
+  "avis_files": {
+    "avis_version": "2",
+    "manifest": "avis.json",
+    "transcript": "transcript.jsonl",
+    "scenes": "scenes.csv",
+    "timeline": "timeline.csv"
+  },
+  
+  "schema_validation": {
+    "passed": true,
+    "errors": []
+  },
+  
+  "warnings": [
+    "NO_AUDIO_TRACK: 视频没有音轨"
+  ],
+  
+  "errors": [],
+  
+  "performance": {
+    "elapsed_ms": 94000,
+    "cache_hit": true
+  },
+  
+  "remote_calls": {
+    "llm": true,
+    "vlm": true,
+    "video_upload": false
+  },
+  
+  "completion_status": {
+    "task_1_unified_entry": true,
+    "task_2_real_asr": true,
+    "task_3_avis_encode": true,
+    "task_6_avis_v2": true,
+    "remaining_tasks": ["task_4_ocr", "task_5_vlm", "task_7_node_e2e", "task_8_cleanup", "task_9_final"]
+  }
+}
