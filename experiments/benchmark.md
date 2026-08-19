@@ -11,6 +11,7 @@
 | **B · L1** | 本项目 + 3-5 帧 VLM 视觉摘要 | `video_understand(target, level="l1")` |
 | **C · 字幕基线** | B站 CC/自动字幕直取 → 纯文本喂 MiMo | `yt-dlp --write-auto-subs --sub-lang zh-CN --skip-download <url>`，字幕全文 + 问题 → `mimo-v2.5` |
 | **D · 抽帧基线** | 无信息层，每 30s 均匀抽 1 帧（JPEG）直发 MiMo VLM + 问题 | `ffmpeg -i video.mp4 -vf fps=1/30 f_%03d.jpg` → MiMo 多模态 |
+| **E · 原生视频** | 零预处理，视频本体经 `video_url` 直发 mimo-v2.5（官方多模态格式，fps=2） | `python3 experiments/baseline_e_native.py <BV> --json` |
 
 C/D 两个基线的调用脚本见 `experiments/baseline_c_subtitle.py` 与 `experiments/baseline_d_frames.py`（如缺失，按上表命令手工执行即可）。
 
@@ -55,7 +56,7 @@ C/D 两个基线的调用脚本见 `experiments/baseline_c_subtitle.py` 与 `exp
 
 - **项目定位成立**（押注批量+隐私）：A 组质量均分 ≥ C 组 90%，且成本 ≤ C/D 的 1/5；或批量 10 视频场景总成本领先 ≥ 一个数量级
 - **定位需收缩到隐私场景**：C 组在解说/教程类质量持平且成本相近，但舞蹈类 A/B 明显胜 C —— README 主卖点从"成本"改为"本地隐私 + 视觉覆盖"
-- **项目价值存疑**：D 组质量全面 ≥ B 且成本差距 < 3 倍 —— 考虑归档或转型为 B站 agent 工具链壳
+- **项目价值存疑**：E 组（原生视频）质量全面 ≥ B 且成本差距 < 3 倍 —— 考虑归档或转型为 B站 agent 工具链壳（E 组是主要判据，D 组为参考）
 
 ## 注意事项
 

@@ -59,6 +59,7 @@ for idx in 0 1 2; do
   run_group "$alias" "$target" B_l1 "$PY" engine/understand_video.py --level l1
   run_group "$alias" "$target" C_subtitle "$PY" experiments/baseline_c_subtitle.py
   run_group "$alias" "$target" D_frames "$PY" experiments/baseline_d_frames.py
+  run_group "$alias" "$target" E_native "$PY" experiments/baseline_e_native.py
   # A 组追问（验证缓存带来的边际成本优势）
   echo "▶ [${alias}/A_followup] 追问 3 个新问题"
   t0=$SECONDS
