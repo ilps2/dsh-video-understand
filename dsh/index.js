@@ -68,21 +68,12 @@ function runScript(python, script, args, signal) {
   })
 }
 
-// Auto-detect Python: env override → plugin-local venv (.venv) → system
-// python3/python on PATH. Cross-platform (macOS/Linux/Windows).
-import { existsSync } from 'node:fs'
-function detectPython() {
-  if (process.env.VIDEO_UNDERSTAND_PYTHON) return process.env.VIDEO_UNDERSTAND_PYTHON
-  const venvPy = process.platform === 'win32'
-    ? path.join(__dirname, '..', '.venv', 'Scripts', 'python.exe')
-    : path.join(__dirname, '..', '.venv', 'bin', 'python3')
-  if (existsSync(venvPy)) return venvPy
-  return process.platform === 'win32' ? 'python' : 'python3'
-}
+// Python 环境：检测 + 首次调用懒安装（共享实现见 dsh/env.mjs）
+import { detectPython, ensurePythonEnv } from './env.mjs'
 
 export function apply(ctx, config = {}) {
   const script = config.scriptPath || process.env.VIDEO_UNDERSTAND_SCRIPT || DEFAULT_SCRIPT
-  const python = config.pythonPath || detectPython()
+  const configuredPython = config.pythonPath
 
   const tool = (toolName) => ({
     name: toolName,
@@ -155,6 +146,15 @@ export function apply(ctx, config = {}) {
       }
       for (const q of args.questions || []) {
         cliArgs.push('--ask', q)
+      }
+      // 首次调用时确保 Python 环境就绪（.venv 懒安装，仅一次）
+      let python = configuredPython
+      if (!python) {
+        try {
+          python = await ensurePythonEnv({ log: (m) => console.error(`[video-understand] ${m}`) })
+        } catch (error) {
+          throw new Error(`video_understand 环境准备失败: ${error.message}\n可运行 npx dsh-video-understand doctor 逐项排查。`)
+        }
       }
       const stdout = await runScript(python, script, cliArgs, exec.signal)
       let parsed

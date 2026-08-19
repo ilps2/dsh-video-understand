@@ -12,12 +12,20 @@
 npm install dsh-video-understand
 
 # 或 dsh plugin add dsh-video-understand
-
-# 安装 Python 依赖（可选，仅 ASR 功能需要）
-pip3 install faster-whisper
 ```
 
+**装完即用**：首次调用 `video_understand` 时自动创建插件本地隔离环境（`.venv`）并安装核心依赖（优先 `uv`，回退 `venv`+pip 清华镜像）——无需手动执行任何命令，不污染系统 Python。
+
 **引擎已内含**，无需额外克隆外部仓库。
+
+### 环境自检
+
+```bash
+npx dsh-video-understand doctor        # 逐项检测 + 给出修复命令
+npx dsh-video-understand doctor --fix  # 一键自动修复（建环境 + 装依赖）
+```
+
+前置条件仅两个：`ffmpeg`（macOS `brew install ffmpeg` / Ubuntu `sudo apt install ffmpeg`）和一个 LLM API key（见下表）。语义层依赖（torch/CLIP/YOLO，约 2GB）为可选，仅建完整语义层时再装：`pip install -r engine/requirements-layer.txt`。
 
 ## ⚠️ 数据流披露
 

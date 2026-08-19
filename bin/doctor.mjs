@@ -6,6 +6,7 @@
 //
 // 用法：
 //   npx dsh-video-understand doctor        # 人类可读报告
+//   npx dsh-video-understand doctor --fix  # 自动修复（懒安装 .venv + 核心依赖）
 //   npx dsh-video-understand doctor --json # 机器可读（供 host/agent 排障）
 
 import { spawnSync, execFileSync } from 'node:child_process'
@@ -13,11 +14,13 @@ import { existsSync, readFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { detectPython as detectPythonShared, ensurePythonEnv, hasCoreDeps, VENV_PY } from '../dsh/env.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PLUGIN_ROOT = path.join(__dirname, '..')
 const IS_WIN = process.platform === 'win32'
 const JSON_MODE = process.argv.includes('--json')
+const FIX_MODE = process.argv.includes('--fix')
 
 // ---------------------------------------------------------------- helpers
 
@@ -57,22 +60,27 @@ function report(id, level, ok, label, fix = null, detail = '') {
   }
 }
 
-// 1. Python：env → 插件 venv → python3
+// 1. Python：env → 插件 venv → PATH（共享 detectPython，与 host 端一致）
 function detectPython() {
-  const venvPy = IS_WIN
-    ? path.join(PLUGIN_ROOT, '.venv', 'Scripts', 'python.exe')
-    : path.join(PLUGIN_ROOT, '.venv', 'bin', 'python3')
-  const candidates = []
-  if (process.env.VIDEO_UNDERSTAND_PYTHON) candidates.push({ p: process.env.VIDEO_UNDERSTAND_PYTHON, why: 'VIDEO_UNDERSTAND_PYTHON' })
-  candidates.push({ p: venvPy, why: '插件自带 .venv' })
-  candidates.push({ p: 'python3', why: 'PATH' })
-  if (IS_WIN) candidates.push({ p: 'python', why: 'PATH' })
-  for (const c of candidates) {
-    if (c.p.includes(path.sep) && !existsSync(c.p)) continue
-    const r = run(c.p, ['-c', 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")'])
-    if (r.ok) return { python: c.p, version: r.stdout, why: c.why }
+  const p = detectPythonShared()
+  if (!p) return null
+  const why = process.env.VIDEO_UNDERSTAND_PYTHON === p
+    ? 'VIDEO_UNDERSTAND_PYTHON'
+    : p === VENV_PY ? '插件自带 .venv' : 'PATH'
+  const r = run(p, ['-c', 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")'])
+  return r.ok ? { python: p, version: r.stdout, why } : null
+}
+
+// --fix：先执行自动修复（建 .venv + 装核心依赖），再进入常规检查
+if (FIX_MODE) {
+  console.log('🔧 自动修复中：创建隔离环境并安装核心依赖…')
+  try {
+    const py = await ensurePythonEnv({ log: (m) => console.log(`   ${m}`) })
+    console.log(`✅ Python 环境就绪: ${py}\n`)
+  } catch (error) {
+    console.error(`❌ 自动修复失败: ${error.message}`)
+    process.exit(1)
   }
-  return null
 }
 
 const py = detectPython()
