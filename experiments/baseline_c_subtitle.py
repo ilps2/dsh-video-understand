@@ -83,10 +83,12 @@ def main():
     in_tok = usage.get("prompt_tokens", 0)
     out_tok = usage.get("completion_tokens", 0)
     # MiMo 单价按引擎 understand_video.py 的口径估算；如不同请改这里
-    cost = (in_tok * 0.0007 + out_tok * 0.0028) / 1000  # 占位单价，按实际价目调整
+    # MiMo 价目：输入(缓存命中) ¥0.02/百万，输入(未命中) ¥1/百万，输出 ¥2/百万
+    cached_tok = usage.get("prompt_cache_hit_tokens") or usage.get("cached_tokens") or 0
+    cost = ((in_tok - cached_tok) * 1 + cached_tok * 0.02 + out_tok * 2) / 1_000_000
     result = {"group": "C", "video": args.target, "subtitle_available": True,
               "subtitle_chars": len(subtitle), "prompt_tokens": in_tok,
-              "completion_tokens": out_tok, "cost_cny": round(cost, 4), "answer": answer}
+              "completion_tokens": out_tok, "cache_hit_tokens": cached_tok, "cost_cny": round(cost, 4), "answer": answer}
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
