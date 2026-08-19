@@ -487,15 +487,28 @@ def main():
         for i, (q, a) in enumerate(zip(qs, answers), 1):
             print(f"\n❓ Q{i} {q}\n💬 {a}\n", flush=True)
 
-        # 3d. 自评
+        # 3d. 自评：逐题评估，取最差题；发现缺口必须生成补救计划，否则自评无意义
         rounds += 1
         if rounds >= args.max_rounds:
             break
-        score, sgap = quality_check(qs[0], answers[0])
+        score, sgap = 10, "none"
+        for q, a in zip(qs, answers):
+            s_i, g_i = quality_check(q, a)
+            if s_i < score:
+                score, sgap = s_i, g_i
         print(f"  [自评] 充分度 {score}/10 | 缺口 {sgap} | 轮次 {rounds}/{args.max_rounds}", flush=True)
         if score >= 7:
             break
         loc_gaps.append(sgap)
+        # 自评发现缺口 → 补一个聚焦动作（此前只记录缺口不行动，导致视觉问题答"信息层未提供"后直接退出）
+        if sgap in ("visual", "asr"):
+            done = set(upgrades)
+            w = wins[0] if wins else f"0-{min(30, int(dur))}"
+            kind = "visual" if sgap == "visual" else "base"
+            tag = f"{'L2' if kind == 'visual' else 'base'}@{w}"
+            if tag not in done:
+                focus_plan.append((kind, w))
+                print(f"  [补救] 自评缺口 {sgap} → 追加聚焦 {tag}", flush=True)
 
     # 4. 汇总
     elapsed = time.time() - t0
