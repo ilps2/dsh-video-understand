@@ -23,8 +23,8 @@ def resolve_video_url(target):
         b64 = base64.b64encode(p.read_bytes()).decode()
         return f"data:video/mp4;base64,{b64}", f"本地文件内联 {size_mb:.1f}MB"
     page = target if target.startswith("http") else f"https://www.bilibili.com/video/{target}"
-    # 取 480p 以下直链：控制 MiMo 服务端拉流体积，也对齐 D 组的分辨率条件
-    r = subprocess.run(["yt-dlp", "-f", "best[height<=480]/best", "-g", page],
+    # 取 480p 以下直链（B站 DASH 音视频分离，取视频流即可，MiMo 端只取画面）
+    r = subprocess.run(["yt-dlp", "-f", "bv*[height<=480]/b[height<=480]/b", "-g", page],
                        capture_output=True, text=True, timeout=120)
     if r.returncode != 0 or not r.stdout.strip():
         raise SystemExit(f"yt-dlp 取直链失败: {r.stderr[-300:]}")

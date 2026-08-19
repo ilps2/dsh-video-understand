@@ -55,7 +55,7 @@ run_group() { # <视频别名> <target> <组名> <命令...>
     rm -f "$raw"
     echo "  ✅ ${elapsed}s → $out"
   else
-    echo "  ❌ 失败（rc=$rc），原始输出: $raw，日志: experiments/results/${alias}_${group}.stderr"
+    echo "  ❌ 失败（rc=${rc}），原始输出: ${raw}，日志: experiments/results/${alias}_${group}.stderr"
   fi
 }
 

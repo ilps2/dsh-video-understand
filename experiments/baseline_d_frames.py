@@ -14,8 +14,12 @@ def download(url_or_path, workdir):
         return Path(url_or_path)
     target = url_or_path if url_or_path.startswith("http") else f"https://www.bilibili.com/video/{url_or_path}"
     out = Path(workdir) / "video.mp4"
-    subprocess.run(["yt-dlp", "-f", "best[height<=480]/best", "-o", str(out), target],
-                   check=True, capture_output=True, timeout=600)
+    # B站 DASH 音视频分离：优先 ≤480p 视频+音频合并，无匹配回退默认最优
+    r = subprocess.run(["yt-dlp", "-f", "bv*[height<=480]+ba/b[height<=480]/b",
+                        "-o", str(out), target],
+                       capture_output=True, text=True, timeout=600)
+    if r.returncode != 0:
+        raise SystemExit(f"yt-dlp 下载失败: {r.stderr[-300:]}")
     return out
 
 
