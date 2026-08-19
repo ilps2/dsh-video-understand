@@ -7,8 +7,8 @@
 
 | 组 | 方案 | 运行方式 |
 |---|---|---|
-| **A · L0** | 本项目信息层（ASR+场景+轨迹 → 文本 → LLM） | `video_understand(target, level="l0")` |
-| **B · L1** | 本项目 + 3-5 帧 VLM 视觉摘要 | `video_understand(target, level="l1")` |
+| **A · 引擎默认** | 本项目信息层（ASR+场景+轨迹 → 文本 → LLM，默认 3 问） | `understand_video.py <target> --json` |
+| **B · 引擎视觉** | 同一引擎 + 视觉细节问题（触发视觉聚焦/L2 证据） | `understand_video.py <target> --ask "穿着/色调/动作细节..." --json` |
 | **C · 字幕基线** | B站 CC/自动字幕直取 → 纯文本喂 MiMo | `yt-dlp --write-auto-subs --sub-lang zh-CN --skip-download <url>`，字幕全文 + 问题 → `mimo-v2.5` |
 | **D · 抽帧基线** | 无信息层，每 30s 均匀抽 1 帧（JPEG）直发 MiMo VLM + 问题 | `ffmpeg -i video.mp4 -vf fps=1/30 f_%03d.jpg` → MiMo 多模态 |
 | **E · 原生视频** | 零预处理，视频本体经 `video_url` 直发 mimo-v2.5（官方多模态格式，fps=2） | `python3 experiments/baseline_e_native.py <BV> --json` |
