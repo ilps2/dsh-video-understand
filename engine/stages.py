@@ -179,6 +179,8 @@ def transcribe(ctx: ProcessingContext) -> bool:
     """
     ASR 转写
     
+    使用 faster-whisper 或 SenseVoice 进行转写。
+    
     Args:
         ctx: 处理上下文
         
@@ -189,20 +191,98 @@ def transcribe(ctx: ProcessingContext) -> bool:
         ctx.add_error(ErrorCode.CANCELLED.value, "处理已取消", stage="transcribe")
         return False
     
+    # 无音频时返回空 transcript（不报错）
     if not ctx.audio_path or not os.path.exists(ctx.audio_path):
-        ctx.add_error(ErrorCode.ASR_FAILED.value, "没有音频文件", stage="transcribe")
-        return False
+        ctx.avis["transcript"] = []
+        ctx.add_warning("NO_AUDIO_TRACK", "视频没有音轨", stage="transcribe")
+        return True
     
     try:
         transcript_dir = ctx.create_work_dir("transcript")
         ctx.transcript_path = str(transcript_dir / "transcript.jsonl")
         
-        # 使用 faster-whisper 进行转写
-        # 这里简化处理，实际应该调用 ASR 模块
-        # 暂时返回空结果
-        ctx.avis["transcript"] = []
+        # 根据 asr_backend 选择 ASR 后端
+        asr_backend = ctx.video_metadata.get("asr_backend", "whisper")
         
-        return True
+        if asr_backend == "sensevoice":
+            # 使用 SenseVoice
+            try:
+                from engine.asr_sensevoice import SenseVoiceASR
+                asr = SenseVoiceASR(device=ctx.video_metadata.get("device", "auto"))
+                segments = asr.transcribe(ctx.audio_path, ctx.transcript_path)
+                ctx.avis["transcript"] = segments
+                return True
+            except Exception as e:
+                print(f"  ⚠ SenseVoice ASR 失败: {e}")
+                print("  回退到 faster-whisper...")
+                asr_backend = "whisper"
+        
+        if asr_backend == "whisper":
+            # 使用 faster-whisper
+            from faster_whisper import WhisperModel
+            
+            model_size = ctx.video_metadata.get("asr_model", "tiny")
+            device = ctx.video_metadata.get("device", "auto")
+            
+            # 自动检测设备
+            if device == "auto":
+                try:
+                    import torch
+                    if torch.cuda.is_available():
+                        device = "cuda"
+                    elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                        device = "mps"
+                    else:
+                        device = "cpu"
+                except ImportError:
+                    device = "cpu"
+            
+            # MPS 不支持 faster-whisper，回退到 CPU
+            if device == "mps":
+                device = "cpu"
+            
+            print(f"  [ASR] 加载 faster-whisper {model_size} (device: {device})")
+            
+            # 设置离线模式
+            os.environ["HF_HUB_OFFLINE"] = "1"
+            
+            # 使用缓存的模型
+            compute_type = "float16" if device != "cpu" else "int8"
+            model = WhisperModel(model_size, device=device, compute_type=compute_type)
+            
+            # 转写
+            segments_gen, info = model.transcribe(
+                ctx.audio_path,
+                language="zh",
+                word_timestamps=True,
+                vad_filter=True,
+            )
+            
+            # 转换为标准格式
+            segments = []
+            for seg in segments_gen:
+                words = [[w.word, round(w.start, 2), round(w.end, 2)]
+                         for w in (seg.words or [])]
+                segments.append({
+                    "start": round(seg.start, 2),
+                    "end": round(seg.end, 2),
+                    "text": seg.text.strip(),
+                    "language": info.language,
+                    "confidence": seg.avg_logprob if hasattr(seg, 'avg_logprob') else None,
+                    "source": f"faster-whisper-{model_size}",
+                })
+            
+            # 写入输出文件
+            with open(ctx.transcript_path, "w", encoding="utf-8") as f:
+                for seg in segments:
+                    f.write(json.dumps(seg, ensure_ascii=False) + "\n")
+            
+            ctx.avis["transcript"] = segments
+            
+            print(f"  [ASR] 转写完成: {len(segments)} segments")
+            return True
+        
+        return False
         
     except Exception as e:
         ctx.add_error(ErrorCode.ASR_FAILED.value, 
