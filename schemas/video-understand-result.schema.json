@@ -1,0 +1,229 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "VideoUnderstandResult",
+  "description": "视频理解结果 schema",
+  "type": "object",
+  "required": ["schema_version", "video", "duration_s", "processing", "avis", "answers", "warnings", "errors"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1",
+      "description": "Schema 版本"
+    },
+    "video": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string",
+          "description": "视频来源（URL/本地路径）"
+        },
+        "local_path": {
+          "type": "string",
+          "description": "本地视频路径"
+        },
+        "duration_s": {
+          "type": "number",
+          "minimum": 0,
+          "description": "视频时长（秒）"
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "视频宽度"
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "视频高度"
+        },
+        "fps": {
+          "type": "number",
+          "minimum": 0,
+          "description": "帧率"
+        },
+        "sha256": {
+          "type": "string",
+          "description": "视频文件 SHA-256 哈希"
+        }
+      },
+      "additionalProperties": false
+    },
+    "duration_s": {
+      "type": "number",
+      "minimum": 0,
+      "description": "视频时长（秒）- 兼容旧格式"
+    },
+    "processing": {
+      "type": "object",
+      "properties": {
+        "started_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "处理开始时间"
+        },
+        "finished_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "处理结束时间"
+        },
+        "elapsed_ms": {
+          "type": "number",
+          "minimum": 0,
+          "description": "处理耗时（毫秒）"
+        },
+        "level": {
+          "type": "string",
+          "enum": ["l0", "l1", "l2"],
+          "description": "实际使用的理解级别"
+        },
+        "privacy_mode": {
+          "type": "string",
+          "enum": ["local_extract", "remote_answer", "remote_visual", "fully_local"],
+          "description": "实际使用的隐私模式"
+        },
+        "cache_hit": {
+          "type": "boolean",
+          "description": "是否命中缓存"
+        }
+      },
+      "additionalProperties": false
+    },
+    "avis": {
+      "type": "object",
+      "properties": {
+        "transcript": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "start": { "type": "number" },
+              "end": { "type": "number" },
+              "text": { "type": "string" }
+            }
+          },
+          "description": "ASR 转写结果"
+        },
+        "scenes": {
+          "type": "array",
+          "description": "场景分类结果"
+        },
+        "motion": {
+          "type": "array",
+          "description": "运动对象轨迹"
+        },
+        "objects": {
+          "type": "array",
+          "description": "YOLO 对象检测结果"
+        },
+        "metadata": {
+          "type": "object",
+          "description": "其他元数据"
+        }
+      },
+      "additionalProperties": false
+    },
+    "answers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["question", "answer", "answer_status"],
+        "properties": {
+          "question": {
+            "type": "string",
+            "description": "问题"
+          },
+          "answer": {
+            "type": "string",
+            "description": "答案"
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "置信度"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "start_s": { "type": "number" },
+                "end_s": { "type": "number" },
+                "source": { "type": "string", "enum": ["asr", "scene", "motion", "object", "visual_l1", "visual_l2"] },
+                "ref": { "type": "string" },
+                "reason": { "type": "string" },
+                "confidence": { "type": "number" }
+              }
+            },
+            "description": "证据时间戳"
+          },
+          "answer_status": {
+            "type": "string",
+            "enum": ["answered", "partially_answered", "insufficient_evidence", "unsupported_question", "failed"],
+            "description": "答案状态"
+          }
+        }
+      },
+      "description": "答案列表"
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": { "type": "string" },
+          "message": { "type": "string" },
+          "stage": { "type": "string" },
+          "retryable": { "type": "boolean" }
+        }
+      },
+      "description": "警告信息"
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": { "type": "string" },
+          "message": { "type": "string" },
+          "stage": { "type": "string" },
+          "retryable": { "type": "boolean" }
+        }
+      },
+      "description": "错误信息"
+    },
+    "video_info": {
+      "type": "object",
+      "description": "视频信息 - 兼容旧格式"
+    },
+    "elapsed_s": {
+      "type": "number",
+      "description": "处理耗时（秒）- 兼容旧格式"
+    },
+    "info_tokens": {
+      "type": "number",
+      "description": "信息层 token 数 - 兼容旧格式"
+    },
+    "orig_frame_tokens": {
+      "type": "number",
+      "description": "原始帧 token 数 - 兼容旧格式"
+    },
+    "token_compression_pct": {
+      "type": "number",
+      "description": "token 压缩率 - 兼容旧格式"
+    },
+    "cost_cny": {
+      "type": "number",
+      "description": "成本（元）- 兼容旧格式"
+    },
+    "layer_cached": {
+      "type": "boolean",
+      "description": "是否命中语义层缓存 - 兼容旧格式"
+    },
+    "suggest_layer": {
+      "type": "boolean",
+      "description": "是否建议构建语义层 - 兼容旧格式"
+    }
+  },
+  "additionalProperties": false
+}

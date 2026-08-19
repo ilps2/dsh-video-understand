@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "VideoUnderstandRequest",
+  "description": "视频理解请求 schema",
+  "type": "object",
+  "required": ["target"],
+  "properties": {
+    "target": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000,
+      "description": "B站 URL / BV 号 / 本地视频绝对路径"
+    },
+    "questions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2000
+      },
+      "minItems": 0,
+      "maxItems": 20,
+      "description": "自定义问题列表（默认 3 问）"
+    },
+    "noDownload": {
+      "type": "boolean",
+      "default": false,
+      "description": "本地文件置 true，跳过下载"
+    },
+    "level": {
+      "type": "string",
+      "enum": ["l0", "l1", "l2"],
+      "default": "l0",
+      "description": "理解级别：l0(默认，本地) / l1(+VLM视觉摘要) / l2(+时间窗证据)"
+    },
+    "window": {
+      "type": "string",
+      "pattern": "^(auto|\\d+-\\d+|\\d+)$",
+      "description": "L2 时间窗：auto(轨迹最活跃30s) / 开始-结束(如10-30) / 秒数"
+    },
+    "privacy_mode": {
+      "type": "string",
+      "enum": ["local_extract", "remote_answer", "remote_visual", "fully_local"],
+      "default": "remote_answer",
+      "description": "隐私模式：控制数据流向"
+    }
+  },
+  "additionalProperties": false
+}

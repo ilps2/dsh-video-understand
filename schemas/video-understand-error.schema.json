@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "VideoUnderstandError",
+  "description": "视频理解错误 schema",
+  "type": "object",
+  "required": ["code", "message"],
+  "properties": {
+    "code": {
+      "type": "string",
+      "enum": [
+        "INVALID_REQUEST",
+        "TARGET_NOT_FOUND",
+        "TARGET_UNSUPPORTED",
+        "DOWNLOAD_FAILED",
+        "MEDIA_PROBE_FAILED",
+        "FFMPEG_FAILED",
+        "ASR_FAILED",
+        "AVIS_FAILED",
+        "VISUAL_ANALYSIS_FAILED",
+        "LLM_AUTH_MISSING",
+        "LLM_REQUEST_FAILED",
+        "LLM_TIMEOUT",
+        "CACHE_READ_FAILED",
+        "CACHE_WRITE_FAILED",
+        "CANCELLED",
+        "INTERNAL_ERROR"
+      ],
+      "description": "错误码"
+    },
+    "message": {
+      "type": "string",
+      "description": "错误消息"
+    },
+    "stage": {
+      "type": "string",
+      "enum": ["request", "download", "probe", "extract_audio", "transcribe", "build_avis", "visual_analysis", "llm", "cache", "runtime"],
+      "description": "错误发生的阶段"
+    },
+    "retryable": {
+      "type": "boolean",
+      "default": false,
+      "description": "是否可重试"
+    },
+    "details": {
+      "type": "object",
+      "description": "错误详情"
+    }
+  },
+  "additionalProperties": false
+}
