@@ -392,7 +392,7 @@ def calc_cost(usage):
     return hit / 1e6 * PRICE_IN_HIT + miss / 1e6 * PRICE_IN_MISS + out / 1e6 * PRICE_OUT, hit, miss
 
 def main():
-    ap = argparse.ArgumentParser(description="问题驱动视频理解（定位→聚焦→自评）")
+    ap = argparse.ArgumentParser(description="视频理解（统一 Pipeline 入口）")
     ap.add_argument("target", help="B站 URL / BV 号 / 本地视频路径")
     ap.add_argument("--ask", action="append", default=[], help="自定义问题（可多次）")
     ap.add_argument("--no-download", action="store_true")
@@ -402,7 +402,56 @@ def main():
     ap.add_argument("--ask-layer", action="store_true",
                     help="回答后询问是否提取完整语义层（base全量+CLIP，后续问题秒答）")
     ap.add_argument("--layer", action="store_true", help="直接提取完整语义层（不询问）")
+    # 新增参数
+    ap.add_argument("--level", default="l0", choices=["l0", "l1", "l2"],
+                    help="理解级别：l0(默认)/l1(+VLM视觉)/l2(+时间窗)")
+    ap.add_argument("--window", help="L2 时间窗，如 10-30")
+    ap.add_argument("--privacy-mode", default="remote_answer",
+                    choices=["local_extract", "remote_answer", "remote_visual", "fully_local"],
+                    help="隐私模式")
+    ap.add_argument("--asr-backend", default="whisper",
+                    choices=["whisper", "sensevoice"],
+                    help="ASR 后端")
+    ap.add_argument("--ocr", default="auto", choices=["auto", "on", "off"],
+                    help="OCR 模式")
+    ap.add_argument("--vlm", default="none",
+                    choices=["none", "florence2", "qwen2vl", "remote"],
+                    help="VLM 后端")
     args = ap.parse_args()
+
+    # 检查是否使用新 Pipeline
+    use_new_pipeline = args.level != "l0" or args.privacy_mode != "remote_answer" or args.asr_backend != "whisper"
+
+    if use_new_pipeline:
+        # 使用新 Pipeline
+        from engine.context import create_context_from_request
+        from engine.pipeline import run_pipeline
+        from engine.result_schema import validate_result
+
+        request = {
+            "target": args.target,
+            "questions": args.ask or DEFAULT_QUESTIONS,
+            "noDownload": args.no_download,
+            "level": args.level,
+            "window": args.window,
+            "privacy_mode": args.privacy_mode,
+        }
+
+        ctx = create_context_from_request(request)
+        ctx.work_dir = args.workdir
+
+        result = run_pipeline(ctx)
+
+        # Schema 验证
+        errors = validate_result(result)
+        if errors:
+            print(f"⚠️ Schema 验证警告: {errors}", file=sys.stderr)
+
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        return
 
     t0 = time.time()
     os.makedirs(args.workdir, exist_ok=True)
