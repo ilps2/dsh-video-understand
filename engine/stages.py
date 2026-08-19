@@ -309,16 +309,17 @@ def build_avis(ctx: ProcessingContext) -> bool:
         avis_dir = ctx.create_work_dir("avis")
         ctx.avis_dir = str(avis_dir)
         
-        # 构建 AVIS manifest
+        # 构建 AVIS manifest (v2)
         manifest = {
-            "avis_version": "0.1.0",
+            "avis_version": "2",
             "video": ctx.video_metadata,
-            "signals": {
-                "transcript": ctx.avis.get("transcript", []),
-                "scenes": ctx.avis.get("scenes", []),
-                "motion": ctx.avis.get("motion", []),
-                "objects": ctx.avis.get("objects", []),
-            }
+            "transcript": ctx.avis.get("transcript", []),
+            "text_tracks": ctx.avis.get("text_tracks", []),
+            "visual_observations": ctx.avis.get("visual_observations", []),
+            "scenes": ctx.avis.get("scenes", []),
+            "motion": ctx.avis.get("motion", []),
+            "objects": ctx.avis.get("objects", []),
+            "metadata": ctx.avis.get("metadata", {}),
         }
         
         # 保存 manifest

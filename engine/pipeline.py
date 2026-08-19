@@ -36,32 +36,40 @@ def run_pipeline(ctx: ProcessingContext) -> Dict:
     try:
         # 阶段 1: 解析目标
         if not resolve_target(ctx):
+            ctx.finished_at = datetime.now()
             return assemble_result(ctx)
         
         # 阶段 2: 探测媒体
         if not probe_media(ctx):
+            ctx.finished_at = datetime.now()
             return assemble_result(ctx)
         
         # 阶段 3: 提取音频
         if not extract_audio(ctx):
+            ctx.finished_at = datetime.now()
             return assemble_result(ctx)
         
         # 阶段 4: ASR 转写
         if not transcribe(ctx):
+            ctx.finished_at = datetime.now()
             return assemble_result(ctx)
         
         # 阶段 5: 构建 AVIS
         if not build_avis(ctx):
+            ctx.finished_at = datetime.now()
             return assemble_result(ctx)
         
         # 阶段 6: 选择视觉证据
         if not select_visual_evidence(ctx):
+            ctx.finished_at = datetime.now()
             return assemble_result(ctx)
         
         # 阶段 7: 回答问题
         if not answer_questions(ctx):
+            ctx.finished_at = datetime.now()
             return assemble_result(ctx)
         
+        ctx.finished_at = datetime.now()
         return assemble_result(ctx)
         
     except Exception as e:
@@ -70,10 +78,8 @@ def run_pipeline(ctx: ProcessingContext) -> Dict:
             f"内部错误: {str(e)}",
             stage="runtime"
         )
-        return assemble_result(ctx)
-    
-    finally:
         ctx.finished_at = datetime.now()
+        return assemble_result(ctx)
 
 
 def run_pipeline_with_timeout(ctx: ProcessingContext, timeout_s: int = 1800) -> Dict:
