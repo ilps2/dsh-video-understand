@@ -68,7 +68,12 @@ def probe(video_path: Path) -> dict:
     vs = vstreams[0]
     w, h = vs["width"], vs["height"]
     fps_str = vs.get("r_frame_rate", "30/1")
-    fps = eval(fps_str) if "/" in fps_str else float(fps_str)
+    # 安全解析 fps：避免使用 eval()
+    if "/" in fps_str:
+        num, den = fps_str.split("/")
+        fps = float(num) / float(den)
+    else:
+        fps = float(fps_str)
     codec = vs.get("codec_name", "unknown")
     orient = "vertical" if h > w else "horizontal"
     fmt = "launch" if orient == "horizontal" else "livestream"

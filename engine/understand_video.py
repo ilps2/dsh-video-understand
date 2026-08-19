@@ -248,7 +248,7 @@ def clip_search(avis_dir, query, top_k=3):
     for line in reversed(r.stdout.strip().splitlines()):
         if line.startswith("["):
             try:
-                return eval(line)
+                return json.loads(line)
             except Exception:
                 continue
     print(f"  ⚠️ CLIP search 解析失败: {r.stdout[-150:]}")
