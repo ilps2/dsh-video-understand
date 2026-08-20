@@ -24,11 +24,27 @@ if os.path.exists("/etc/ssl/cert.pem"):
 
 # VLM 配置：环境变量 → DSH credentials 文件 → 默认值
 def _load_vlm_config():
-    key = os.environ.get("LLM_API_KEY") or os.environ.get("DEEPSEEK_API_KEY", "")
-    url = os.environ.get("LLM_API_URL", "https://api.xiaomimimo.com/v1/chat/completions")
-    model = os.environ.get("VLM_MODEL", "mimo-v2.5")
-    if key:
-        return key, url, model
+    """配对规则：一把 key 绝不能被送到不是为它选定的主机上。
+      - LLM_API_KEY（显式覆盖）：key 是用户选的，他设的 URL/model 也照用
+      - DEEPSEEK_API_KEY（且未设 LLM_API_URL）：配对 DeepSeek 端点与模型
+      - 未设任何 key → 读 DSH credentials 文件（xiaomi/deepseek 各自配对）"""
+    url = os.environ.get("LLM_API_URL", "")
+    model = os.environ.get("VLM_MODEL", "")
+    # 显式覆盖：用户同时指定了 key 与（可选的）url/model —— 一律照用
+    if os.environ.get("LLM_API_KEY"):
+        return (os.environ["LLM_API_KEY"],
+                url or "https://api.xiaomimimo.com/v1/chat/completions",
+                model or "mimo-v2.5")
+    # DeepSeek key：未显式指定 LLM_API_URL 时，绝不发往默认的小米端点
+    if os.environ.get("DEEPSEEK_API_KEY") and not os.environ.get("LLM_API_URL"):
+        return (os.environ["DEEPSEEK_API_KEY"],
+                "https://api.deepseek.com/v1/chat/completions",
+                "deepseek-chat")
+    if os.environ.get("DEEPSEEK_API_KEY"):
+        # 显式 LLM_API_URL 存在：尊重用户设置（他们选了 DeepSeek key + 自定义端点）
+        return (os.environ["DEEPSEEK_API_KEY"],
+                url or "https://api.deepseek.com/v1/chat/completions",
+                model or "deepseek-chat")
     # Fallback: DSH credentials file
     cred = os.path.expanduser("~/.dsh/.credentials.yaml")
     if os.path.exists(cred):

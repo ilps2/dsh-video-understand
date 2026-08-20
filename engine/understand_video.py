@@ -46,12 +46,30 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 # LLM 配置：环境变量 → DSH credentials 文件 → 默认值
 def _load_llm_config():
-    """Load LLM API key: env var → DSH credentials file → empty."""
-    key = os.environ.get("LLM_API_KEY") or os.environ.get("DEEPSEEK_API_KEY", "")
-    url = os.environ.get("LLM_API_URL", "https://api.xiaomimimo.com/v1/chat/completions")
-    model = os.environ.get("LLM_MODEL", "mimo-v2.5")
-    if key:
-        return key, url, model
+    """Load LLM API key: env var → DSH credentials file → empty.
+
+    配对规则：一把 key 绝不能被送到不是为它选定的主机上。
+      - LLM_API_KEY（显式覆盖）：key 是用户选的，他设的 URL/model 也照用
+      - DEEPSEEK_API_KEY（且未设 LLM_API_URL）：配对 DeepSeek 端点与模型
+      - 未设任何 key → 读 DSH credentials 文件（xiaomi/deepseek 各自配对）
+    """
+    url = os.environ.get("LLM_API_URL", "")
+    model = os.environ.get("LLM_MODEL", "")
+    # 显式覆盖：用户同时指定了 key 与（可选的）url/model —— 一律照用
+    if os.environ.get("LLM_API_KEY"):
+        return (os.environ["LLM_API_KEY"],
+                url or "https://api.xiaomimimo.com/v1/chat/completions",
+                model or "mimo-v2.5")
+    # DeepSeek key：未显式指定 LLM_API_URL 时，绝不发往默认的小米端点
+    if os.environ.get("DEEPSEEK_API_KEY") and not os.environ.get("LLM_API_URL"):
+        return (os.environ["DEEPSEEK_API_KEY"],
+                "https://api.deepseek.com/v1/chat/completions",
+                "deepseek-chat")
+    if os.environ.get("DEEPSEEK_API_KEY"):
+        # 显式 LLM_API_URL 存在：尊重用户设置（他们选了 DeepSeek key + 自定义端点）
+        return (os.environ["DEEPSEEK_API_KEY"],
+                url or "https://api.deepseek.com/v1/chat/completions",
+                model or "deepseek-chat")
     # Fallback: DSH credentials file (~/.dsh/.credentials.yaml)
     cred = os.path.expanduser("~/.dsh/.credentials.yaml")
     if os.path.exists(cred):
@@ -406,6 +424,8 @@ def main():
     ap.add_argument("--level", default="l0", choices=["l0", "l1", "l2"],
                     help="理解级别：l0(默认)/l1(+VLM视觉)/l2(+时间窗)")
     ap.add_argument("--window", help="L2 时间窗，如 10-30")
+    ap.add_argument("--budget-cny", type=float, default=None,
+                    help="单次问题预算上限（元）。视觉成本估算超预算时拦截 L2 升级（降级 L0/L1）")
     ap.add_argument("--privacy-mode", default="remote_answer",
                     choices=["local_extract", "remote_answer", "remote_visual", "fully_local"],
                     help="隐私模式")
@@ -435,6 +455,10 @@ def main():
             "level": args.level,
             "window": args.window,
             "privacy_mode": args.privacy_mode,
+            "max_rounds": args.max_rounds,
+            "build_layer": args.layer,
+            "ask_layer": args.ask_layer,
+            "budget_cny": args.budget_cny,
         }
 
         ctx = create_context_from_request(request)

@@ -5,8 +5,8 @@
 // on every request (no trigger gamble, unlike prompt-triggered skills), so
 // the agent reliably knows it can ask about a video.
 //
-// Pipeline (spawned, token compression 99.95%+ vs frame sampling):
-//   target(B站URL/BV/本地路径) → 下载(360p) → AVIS 信息层(MV/ASR/场景/YOLO轨迹)
+// Pipeline (spawned; AVIS info layer instead of per-frame sampling):
+//   target(B站URL/BV/本地路径) → 下载 → AVIS 信息层(MV/ASR/场景/YOLO轨迹)
 //   → 融合 prompt → MiMo 摘要+问答 → JSON
 //
 // 数据流：L0 完全本地；L1/L2 使用 MiMo API 进行视觉分析（帧上传至 MiMo 服务器）。
@@ -14,7 +14,7 @@
 import { spawn } from 'node:child_process'
 import os from 'node:os'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 export const name = 'video-understand'
 export const inject = ['tools']
@@ -27,7 +27,21 @@ const OUTPUT_SCHEMA = {
   type: 'object',
   additionalProperties: true,
   properties: {
-    video: { type: 'string' },
+    // Python 0.5.0 起 video 为对象（VideoInfo）；旧版为字符串（basename）——
+    // render 层兼容两种形态，这里按最新 schema 声明。
+    video: {
+      type: 'object',
+      properties: {
+        source: { type: 'string' },
+        local_path: { type: 'string' },
+        duration_s: { type: 'number' },
+        width: { type: 'number' },
+        height: { type: 'number' },
+        fps: { type: 'number' },
+        sha256: { type: 'string' },
+      },
+      additionalProperties: true,
+    },
     duration_s: { type: 'number' },
     elapsed_s: { type: 'number' },
     info_tokens: { type: 'number' },
@@ -37,6 +51,40 @@ const OUTPUT_SCHEMA = {
     prompt_cache_hit_tokens: { type: 'number' },
     layer_cached: { type: 'boolean' },
     suggest_layer: { type: 'boolean' },
+    routing: {
+      type: 'object',
+      properties: {
+        video_type: { type: 'string' },
+        strategy: { type: 'string' },
+        level: { type: 'string' },
+        obj_tracks: { type: 'number' },
+        visual_notes: { type: 'number' },
+        cache_hit: { type: 'boolean' },
+        question_intent: { type: 'string' },
+        required_capability: { type: 'string' },
+        initial_layer: { type: 'string' },
+        effective_layer: { type: 'string' },
+        upgrade_layer: { type: ['string', 'null'] },
+        escalation_reason: { type: 'array', items: { type: 'string' } },
+        evidence_score: { type: 'number' },
+        evidence_sources: { type: 'array', items: { type: 'string' } },
+        missing_evidence: { type: 'array', items: { type: 'string' } },
+        frames_sent: { type: 'number' },
+        video_profile: {
+          type: 'object',
+          properties: {
+            asr_coverage: { type: 'number' },
+            motion_score: { type: 'number' },
+            static_ratio: { type: 'number' },
+            ocr_text_count: { type: 'number' },
+            track_count: { type: 'number' },
+          },
+          additionalProperties: true,
+        },
+        subtasks: { type: 'array', items: { type: 'object' } },
+      },
+      additionalProperties: true,
+    },
     answers: {
       type: 'array',
       items: {
@@ -78,9 +126,10 @@ export function apply(ctx, config = {}) {
   const tool = (toolName) => ({
     name: toolName,
     description:
-      '低成本理解一个视频：输入 B站链接 / BV 号 / 本地视频路径，返回摘要+问答（token 压缩 99.95%+）。可选 level 参数升级视觉级（l1/l2）。返回中 suggest_layer=true 表示该视频尚未建完整语义层（base全量+CLIP，一次性2-4min，之后任何问题秒答）——若用户表示还会追问该视频其他问题，主动询问是否建层。' +
+      '低成本理解一个视频：输入 B站链接 / BV 号 / 本地视频路径，返回摘要+问答（用 AVIS 信息层代替逐帧像素，LLM 调用仅需几千 token）。可选 level 参数升级视觉级（l1/l2）。返回中 suggest_layer=true 表示该视频尚未建完整语义层（base全量+CLIP，一次性2-4min，之后任何问题秒答）——若用户表示还会追问该视频其他问题，主动询问是否建层。' +
       '用户提到"理解这个视频/视频讲了什么/总结视频"或给出视频链接时使用。' +
       '可选 questions 数组自定义要问的问题（默认 3 问：核心内容/亮点/适合人群）。' +
+      '可选 budgetCny 设定单次预算上限（元），超预算自动降级省成本。' +
       '数据流：L0 完全本地；L1/L2 使用 MiMo API 进行视觉分析（帧上传至 MiMo 服务器）。',
     parameters: {
       type: 'object',
@@ -101,11 +150,15 @@ export function apply(ctx, config = {}) {
         level: {
           type: 'string',
           enum: ['l0', 'l1', 'l2'],
-          description: 'l0=信息层(默认,~0.006元) l1=+3-5帧VLM视觉摘要(MiMo API,+0.0005元) l2=+时间窗密集帧证据(MiMo API)',
+          description: 'l0=信息层(默认,全本地) l1=+3-5帧VLM视觉摘要(MiMo API) l2=+时间窗密集帧证据(MiMo API)',
         },
         window: {
           type: 'string',
           description: 'L2 时间窗，如 10-30 或秒数（auto=轨迹最活跃30s）',
+        },
+        budgetCny: {
+          type: 'number',
+          description: '单次问题预算上限（元）。视觉成本估算超预算时自动降级（拦截 L2，用 L0/L1 回答）',
         },
       },
       required: ['target'],
@@ -113,7 +166,13 @@ export function apply(ctx, config = {}) {
     output: {
       schema: OUTPUT_SCHEMA,
       render: (_args, value) => {
-        const lines = [`🎬 ${value.video}（${value.duration_s}s）`]
+        // 兼容 0.5.0 的对象 video（VideoInfo）与旧版字符串（basename）
+        const video = value.video || {}
+        const videoLabel =
+          typeof video === 'string'
+            ? video
+            : video.local_path || video.source || 'unknown video'
+        const lines = [`🎬 ${videoLabel}（${value.duration_s}s）`]
         for (const a of value.answers || []) {
           lines.push(`\n❓ ${a.question}\n${a.answer}`)
         }
@@ -138,10 +197,11 @@ export function apply(ctx, config = {}) {
       }
       const cliArgs = [args.target, '--json']
       if (args.noDownload) cliArgs.push('--no-download')
+      if (typeof args.budgetCny === 'number') cliArgs.push('--budget-cny', String(args.budgetCny))
       if (args.level && args.level !== 'l0') {
         cliArgs.push('--level', args.level)
         if (args.level === 'l2' && args.window) {
-          cliArgs.push('--l2-window', args.window)
+          cliArgs.push('--window', args.window)
         }
       }
       for (const q of args.questions || []) {
@@ -172,4 +232,57 @@ export function apply(ctx, config = {}) {
   } catch (error) {
     console.error(`[video-understand] tool registration skipped: ${error}`)
   }
+}
+
+// --self-test：不依赖 ctx/网络，仅验证工具 schema 与 render 对新旧两种
+// video 格式（0.5.0 对象 / 旧版字符串）的兼容性。
+// 运行：node dsh/index.js --self-test
+const isMain =
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+
+if (isMain && process.argv.includes('--self-test')) {
+  const registered = []
+  const ctx = { effect: () => {}, tools: { register: (t) => registered.push(t) } }
+  apply(ctx, {})
+  const tool = registered[0]
+  if (!tool) throw new Error('no tool registered')
+
+  const renderFor = (video) =>
+    tool.output.render({}, { video, duration_s: 3, answers: [], token_compression_pct: 0, cost_cny: 0, elapsed_s: 0 })
+
+  // 旧版字符串格式
+  const legacy = renderFor('/tmp/old.mp4')
+  if (!legacy[0].text.includes('/tmp/old.mp4')) throw new Error('legacy string video not rendered')
+
+  // 0.5.0 对象格式（VideoInfo）
+  const obj = {
+    schema_version: '1',
+    video: {
+      source: 'local',
+      local_path: '/tmp/test.mp4',
+      duration_s: 3,
+      width: 1280,
+      height: 720,
+      fps: 25,
+      sha256: 'abc',
+    },
+    duration_s: 3,
+    answers: [],
+    warnings: [],
+    errors: [],
+  }
+  if (typeof obj.video !== 'object' || obj.video === null) {
+    throw new Error('video object shape rejected')
+  }
+  if (!obj.video.local_path) throw new Error('video.local_path missing')
+  const rendered = renderFor(obj.video)
+  if (!rendered[0].text.includes('/tmp/test.mp4')) throw new Error('object video not rendered')
+  if (!rendered[0].text.includes('（3s）')) throw new Error('duration not rendered')
+
+  // video 缺失时降级不崩溃
+  const fallback = renderFor(undefined)
+  if (!fallback[0].text.includes('unknown video')) throw new Error('missing video fallback broken')
+
+  console.log(`PASS: ${name} --self-test (schema + render, video object/string compatible)`)
 }

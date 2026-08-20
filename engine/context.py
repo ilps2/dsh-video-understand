@@ -26,6 +26,10 @@ class ProcessingContext:
     level: str = "l0"
     window: Optional[str] = None
     privacy_mode: str = "remote_answer"
+    max_rounds: int = 3
+    build_layer: bool = False
+    ask_layer: bool = False
+    budget_cny: Optional[float] = None
     
     # 工作目录
     work_dir: Optional[str] = None
@@ -147,4 +151,8 @@ def create_context_from_request(request: Dict) -> ProcessingContext:
         level=request.get("level", "l0"),
         window=request.get("window"),
         privacy_mode=request.get("privacy_mode", "remote_answer"),
+        max_rounds=int(request.get("max_rounds", 3) or 3),
+        build_layer=bool(request.get("build_layer", False)),
+        ask_layer=bool(request.get("ask_layer", False)),
+        budget_cny=request.get("budget_cny"),
     )

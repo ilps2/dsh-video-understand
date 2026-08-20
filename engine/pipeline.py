@@ -17,6 +17,7 @@ from .stages import (
     select_visual_evidence,
     answer_questions,
     assemble_result,
+    focused_answer_loop,
 )
 from .result_schema import ErrorCode
 
@@ -59,13 +60,35 @@ def run_pipeline(ctx: ProcessingContext) -> Dict:
             ctx.finished_at = datetime.now()
             return assemble_result(ctx)
         
-        # 阶段 6: 选择视觉证据
-        if not select_visual_evidence(ctx):
-            ctx.finished_at = datetime.now()
-            return assemble_result(ctx)
-        
-        # 阶段 7: 回答问题
-        if not answer_questions(ctx):
+        # 阶段 6: 语义层路由 —— 已有完整层直接查层回答（中间件复用）；
+        #        无层走多轮聚焦回答；request 要求建层时先建层再查层
+        from .stages import (
+            build_semantic_layer,
+            answer_from_layer,
+            _has_full_layer_cache,
+        )
+
+        build_layer = bool(getattr(ctx, "build_layer", False) or getattr(ctx, "ask_layer", False))
+        if build_layer and not _has_full_layer_cache(ctx):
+            layer = build_semantic_layer(ctx)
+            if layer:
+                ctx.cache_hit = True  # 建层本身已复用信息层
+                if not answer_from_layer(ctx):
+                    ctx.finished_at = datetime.now()
+                    return assemble_result(ctx)
+                ctx.finished_at = datetime.now()
+                return assemble_result(ctx)
+            # 建层失败 → 降级走普通路径
+            ctx.add_warning("LAYER_FALLBACK", "语义层构建失败，降级到普通多轮问答", stage="layer")
+
+        if _has_full_layer_cache(ctx):
+            if answer_from_layer(ctx):
+                ctx.finished_at = datetime.now()
+                return assemble_result(ctx)
+            # 层回答失败 → 降级走普通路径
+
+        max_rounds = getattr(ctx, "max_rounds", 3) or 3
+        if not focused_answer_loop(ctx, max_rounds=max_rounds):
             ctx.finished_at = datetime.now()
             return assemble_result(ctx)
         

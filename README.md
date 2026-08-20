@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/dsh-video-understand)](https://www.npmjs.com/package/dsh-video-understand)
 [![GitHub stars](https://img.shields.io/github/stars/ilps2/dsh-video-understand)](https://github.com/ilps2/dsh-video-understand)
 
-低成本视频理解插件：给 dsh agent 注册 `video_understand` 工具——B站链接 / BV 号 / 本地视频 → AVIS 信息层 → 摘要+问答（token 压缩 99.95%+，成本约 0.006 元/视频）。
+低成本视频理解插件：给 dsh agent 注册 `video_understand` 工具——B站链接 / BV 号 / 本地视频 → AVIS 信息层（ASR 转写 + 场景结构 + 运动对象轨迹 + YOLO 语义）→ 摘要+问答。引擎自包含，无需外部依赖。
 
 ## 安装
 
@@ -62,6 +62,7 @@ npx dsh-video-understand doctor --fix  # 一键自动修复（建环境 + 装依
 | noDownload | boolean | 本地文件置 true |
 | level | string | `l0`(默认) / `l1`(+3-5帧VLM视觉摘要) / `l2`(+时间窗密集帧证据) |
 | window | string | L2 时间窗，如 `10-30` 或秒数（auto=轨迹最活跃30s） |
+| budgetCny | number | 单次问题预算上限（元），视觉成本估算超预算自动降级（拦截 L2 用 L0/L1 回答） |
 
 返回 JSON：`video / duration_s / token_compression_pct / cost_cny / answers[]`。
 
@@ -86,24 +87,26 @@ dsh-video-understand/
 
 ## 分级实测（2026-08）
 
-| 层级 | 内容 | 数据流向 | 成本 |
+| 层级 | 内容 | 数据流向 | 成本（估算*） |
 |---|---|---|---|
-| L0 信息层 | ASR+场景+轨迹+YOLO → 摘要/问答 | 本地 | ~0.006 元 |
-| L1 视觉级 | 3-5 帧 VLM → 颜色/姿态/衣着 | MiMo API | +0.0005 元 |
+| L0 信息层 | ASR+场景+轨迹+YOLO → 摘要/问答 | 本地 | 仅 LLM 文本成本 |
+| L1 视觉级 | 3-5 帧 VLM → 颜色/姿态/衣着 | MiMo API | +数帧 VLM 成本 |
 | L2 证据级 | 时间窗密集帧 → 时间线 | MiMo API | 按窗长 |
+
+> \* 成本按 `engine/understand_video.py` 的价格常量估算（可配置输入），实际随厂商定价变化，非测量承诺。详见 [docs/blog-视频理解性价比实验](docs/blog-视频理解性价比实验-2026-08-20.md)（方法 + 实测）。
 
 实测：电影解说 L1 补出「白色立领衬衫/神情凝重/暗色调诊室」（L0 完全给不出）；舞蹈 L2 逐帧「头部转 15-20°→45°、口型开口→闭合→微笑」。
 
 ## 设计背景
 
-本插件的核心目标是**低成本视频理解**（单视频 0.006 元起）。
+本插件的核心目标是**低成本视频理解**：用信息层代替逐帧像素喂 LLM，单视频 LLM 调用仅需几千 token（具体成本取决于所选模型定价，见上）。
 
 - **LLM 选型**：最初选用 DeepSeek v4 Flash 因其性价比最优；近期调价后已迁移至 MiMo，持续追踪成本效益比
 - **视觉级（L1/L2）**：DeepSeek 暂不支持多模态输入，故 L1/L2 使用 MiMo API 进行视觉分析（此前曾使用 DashScope 作为过渡方案）。未来若 DeepSeek 支持多模态或出现更优的本地推理方案，可进一步优化成本
 
 ## 原理
 
-引擎把视频压缩成**信息层**（ASR 转写 + 场景结构 + 运动对象轨迹 + YOLO 语义，约 1k token）再喂 LLM，对比逐帧像素（540 万 token）压缩 99.95%+；同一视频重复理解时信息层命中上下文缓存（93%），每次成本约为首次的 1/20。
+引擎把视频压缩成**信息层**（ASR 转写 + 场景结构 + 运动对象轨迹 + YOLO 语义，约 1k token）再喂 LLM；同一视频重复理解时信息层缓存复用（内容哈希，二次提问跳过 ASR）。成本与 token 对比的具体测量见 [docs/blog-视频理解性价比实验](docs/blog-视频理解性价比实验-2026-08-20.md)。
 
 ## License
 
