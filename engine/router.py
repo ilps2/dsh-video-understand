@@ -356,6 +356,22 @@ def choose(video_profile: Dict, question: str, available: Dict[str, bool],
         estimated_cost = frames_planned * VLM_COST_PER_FRAME_CNY + LLM_COST_PER_ANSWER_CNY
         escalation.append(f"缺证据 {ev['missing']} → 升级到 {route['upgrade_layer']}")
 
+    # ── ASR 稀疏自动升级：ASR 覆盖率 < 40% 且意图需要画面信息 ──
+    # 当语音信息不足（BGM 剪辑/纯画面视频），即使 intent=summary 也应
+    # 升级到 L2 全局扫描（均匀抽帧拼接 + VLM 批量分析），因为 ASR 无法回答。
+    ASR_SPARSE_THRESHOLD = 0.40
+    asr_cov = float(video_profile.get("asr_coverage", 1.0) or 1.0)
+    if (asr_cov < ASR_SPARSE_THRESHOLD
+            and effective in ("l0", "l1")
+            and visual_allowed
+            and not budget_blocked):
+        effective = "l2"
+        mode = "global_scan"
+        escalation.append(
+            f"ASR 覆盖率仅 {asr_cov:.0%}（<{ASR_SPARSE_THRESHOLD:.0%}），"
+            f"语音信息不足 → 升级 L2 全局扫描模式（均匀抽帧拼接+VLM）"
+        )
+
     # 子任务拆解
     subtasks = split_question(question)
 
@@ -375,6 +391,8 @@ def choose(video_profile: Dict, question: str, available: Dict[str, bool],
         "budget_blocked": budget_blocked,
         "estimated_cost_cny": round(estimated_cost, 5),
         "budget_cny": budget_cny,
+        "scan_mode": "global_scan" if (effective == "l2" and asr_cov < ASR_SPARSE_THRESHOLD
+                                        and not route.get("visual_required")) else None,
         "video_type": video_type,
         "subtasks": subtasks,
     }

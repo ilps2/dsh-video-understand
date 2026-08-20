@@ -12,6 +12,7 @@ import subprocess
 import hashlib
 import urllib.request
 import ssl
+import numpy as np
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -519,6 +520,17 @@ def build_avis(ctx: ProcessingContext) -> bool:
                 print(f"  ⚠️ obj_tracks 解析失败: {e}", flush=True)
         ctx.video_metadata["track_count"] = n_tracks
         
+        # ── 场景边界检测（PyAV MV / 帧差 fallback，零模型成本）──
+        scene_boundaries = []
+        if ctx.local_video_path and os.path.exists(ctx.local_video_path):
+            try:
+                from .scene_classifier import detect_scene_boundaries
+                scene_boundaries = detect_scene_boundaries(ctx.local_video_path)
+                ctx.video_metadata["scene_boundaries"] = scene_boundaries
+                print(f"  [场景] 边界检测: {len(scene_boundaries)} 个变换点", flush=True)
+            except Exception as e:
+                print(f"  ⚠️ 场景边界检测失败（继续）: {e}", flush=True)
+        
         # ── OCR 文字计数（画面文字，free 信号；失败不阻断）──
         ocr_count = 0
         try:
@@ -681,22 +693,81 @@ def select_visual_evidence(ctx: ProcessingContext, focus_round: int = 1) -> bool
         if not decision.get("visual_allowed", True):
             return True
 
-        # ── 抽帧时间点（L1 定位窗口优先；无窗口则按类型/级别兜底）──
-        if ctx.window and ctx.window != "auto":
+        # ── 抽帧时间点：根据 scan_mode 走不同策略 ──
+        scan_mode = decision.get("scan_mode")
+        intent_q = decision["intent"]
+
+        if scan_mode == "global_scan":
+            # 全局扫描模式：分批调用 VLM（每批 ≤7 帧，避免单张图过大）
+            scan_step = max(10, int(dur / 15))  # 15 帧以内，最多每 10s 一帧
+            all_times = [round(t, 1) for t in np.arange(0, dur, scan_step)]
+            question = (
+                f"这是视频剪辑的一部分帧，按时间顺序排列。"
+                f"用户问题：{first_q}\n"
+                "逐帧识别：画面中的角色/物体、场景类型（动作/变身/战斗/对话等）、"
+                "文字标注。如有变身请标注时间段。"
+            )
+            # 分批调用（每批 7 帧，避免拼接图过大导致 VLM 返回空内容）
+            BATCH = 7
+            all_descs = []
+            all_pin = all_pout = 0
+            for start in range(0, len(all_times), BATCH):
+                batch_times = all_times[start:start + BATCH]
+                batch_frames = []
+                for i, t in enumerate(batch_times):
+                    idx = start + i
+                    fp = str(frames_dir / f"scan_{idx:02d}_{int(t)}s.jpg")
+                    extract_frame(ctx.local_video_path, t, fp)
+                    batch_frames.append(fp)
+                desc, pin, pout = vlm_frames(batch_frames, question)
+                if desc:
+                    all_descs.append(desc)
+                all_pin += pin
+                all_pout += pout
+                times = all_times  # 后续 evidence 构建用
+
+            # 合并描述
+            desc = "\n\n".join(all_descs) if all_descs else ""
+            pin, pout = all_pin, all_pout
+            frame_paths = [str(frames_dir / f"scan_{i:02d}_{int(t)}s.jpg")
+                           for i, t in enumerate(all_times)]
+            print(f"  [模式] 全局扫描（ASR 稀疏）→ {len(all_times)} 帧，"
+                  f"{(len(all_times)+BATCH-1)//BATCH} 批", flush=True)
+
+            # 全局扫描已完成 VLM 调用，直接写入结果
+            ctx.evidence = []
+            for i, t in enumerate(all_times):
+                ctx.evidence.append({
+                    "start_s": float(t),
+                    "end_s": float(t) + scan_step,
+                    "source": "visual_l2",
+                    "ref": frame_paths[i] if i < len(frame_paths) else None,
+                    "reason": f"全局扫描 @ {t:.0f}s（ASR 稀疏模式）",
+                    "confidence": None,
+                })
+            if desc:
+                note = f"\n## 视觉补充（全局扫描 {len(all_times)} 帧 @ {[f'{t:.0f}s' for t in all_times]}）\n{desc}\n"
+                ctx.avis["visual_notes"] = ctx.avis.get("visual_notes", []) + [note]
+                ctx.avis["metadata"] = dict(ctx.avis.get("metadata", {}))
+                ctx.avis["metadata"]["visual_tokens"] = {"in": pin, "out": pout}
+            print(f"  ✅ 全局扫描 {len(desc)} 字 | VLM {pin}+{pout} tok", flush=True)
+            return True
+
+        elif ctx.window and ctx.window != "auto":
             times = pick_times_l2(dur, ctx.window, step=max(2, 5 - (focus_round - 1) * 2))
+            question = _visual_prompt_for_intent(intent_q, first_q)
         elif located_windows and loc_gap in ("visual", "asr"):
             times = _frames_in_windows(located_windows, dur, per_window=per_window)
+            question = _visual_prompt_for_intent(intent_q, first_q)
         elif track_windows:
-            # L1 轨迹活跃窗口作为 L2 注意力引导
             times = _frames_in_windows(track_windows[:2], dur, per_window=per_window)
+            question = _visual_prompt_for_intent(intent_q, first_q)
         elif effective == "l2":
             times = pick_times_l2(dur, "auto", step=5)
+            question = _visual_prompt_for_intent(intent_q, first_q)
         else:
             times = pick_times_l1(avis_dir, dur, 5)
-
-        # 意图相关的 VLM 问题描述
-        intent_q = decision["intent"]
-        question = _visual_prompt_for_intent(intent_q, first_q)
+            question = _visual_prompt_for_intent(intent_q, first_q)
 
         if not times:
             ctx.add_warning("VISUAL_NO_FRAMES", "没有可用的帧时间点", stage="visual_analysis")
