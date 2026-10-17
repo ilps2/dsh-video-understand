@@ -50,7 +50,7 @@ def _load_vlm_config():
     if os.path.exists(cred):
         try:
             keys = {}
-            with open(cred) as f:
+            with open(cred, encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if line.startswith("XIAOMI_API_KEY:"):
@@ -68,7 +68,7 @@ def _load_vlm_config():
 API_KEY, API_URL, MODEL = _load_vlm_config()
 
 def run(cmd):
-    return subprocess.run(cmd, capture_output=True, text=True)
+    return subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
 
 def probe_dur(video):
     r = run(["ffprobe", "-v", "error", "-select_streams", "v:0",

@@ -64,7 +64,8 @@ const OUTPUT_SCHEMA = {
         required_capability: { type: 'string' },
         initial_layer: { type: 'string' },
         effective_layer: { type: 'string' },
-        upgrade_layer: { type: ['string', 'null'] },
+        // DSH 的工具注册表只接受「单个类型字符串」，类型数组会让注册静默失败。
+        upgrade_layer: {},
         escalation_reason: { type: 'array', items: { type: 'string' } },
         evidence_score: { type: 'number' },
         evidence_sources: { type: 'array', items: { type: 'string' } },

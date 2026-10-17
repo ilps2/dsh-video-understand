@@ -30,9 +30,9 @@ def extract_audio(video: Path, wav: Path) -> bool:
         return False
     cmd = [ffmpeg, "-y", "-i", str(video), "-vn",
            "-ac", "1", "-ar", "16000", "-f", "wav", str(wav)]
-    r = subprocess.run(cmd, capture_output=True)
+    r = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace")
     if r.returncode != 0 or not wav.exists():
-        print(f"[asr] 音频提取失败: {r.stderr.decode()[-300:]}", file=sys.stderr)
+        print(f"[asr] 音频提取失败: {r.stderr[-300:]}", file=sys.stderr)
         return False
     return True
 

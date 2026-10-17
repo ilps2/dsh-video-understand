@@ -201,7 +201,7 @@ def extract_audio_for_sensevoice(ctx: ProcessingContext) -> bool:
             "-f", "wav",
             ctx.audio_path
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120, encoding="utf-8", errors="replace")
         
         if result.returncode != 0:
             ctx.add_error(ErrorCode.FFMPEG_FAILED.value, 

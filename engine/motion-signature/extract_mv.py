@@ -33,7 +33,7 @@ def extract_motion_vectors(video_path: str, output_path: str, target_fps: int = 
             "-show_format",
             video_path
         ]
-        r = subprocess.run(cmd, capture_output=True, text=True)
+        r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
         if r.returncode != 0:
             return False
         

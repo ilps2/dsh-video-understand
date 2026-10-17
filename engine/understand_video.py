@@ -13,6 +13,14 @@
 import argparse, glob, json, os, re, subprocess, sys, time, urllib.request
 import os
 import ssl
+
+
+# --- Windows: 让 stdout/stderr 走 UTF-8，避免默认 GBK 打印 emoji/中文时崩溃或乱码 ---
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 # 系统代理(Clash MITM)用自签名证书 → 指向 macOS 系统证书链（双保险）
 if os.path.exists("/etc/ssl/cert.pem"):
     os.environ.setdefault("SSL_CERT_FILE", "/etc/ssl/cert.pem")
@@ -75,7 +83,7 @@ def _load_llm_config():
     if os.path.exists(cred):
         try:
             keys = {}
-            with open(cred) as f:
+            with open(cred, encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if line.startswith("XIAOMI_API_KEY:"):
@@ -98,7 +106,7 @@ DEFAULT_QUESTIONS = [
 ]
 
 def run(cmd, timeout=1800):
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, encoding="utf-8", errors="replace")
 
 def llm(messages, max_tokens=16384):
     if not KEY:

@@ -40,7 +40,7 @@ def detect_scene_boundaries(video_path: str, sample_fps: float = 1.0,
         return _detect_boundaries_fallback(video_path, sample_fps, threshold, min_gap)
 
     try:
-        container = av.open(video_path)
+        container = av.open(video_path)   # 注意：PyAV 的 open() 不接受 encoding 参数
         stream = container.streams.video[0]
         # 使用 export_mvs 让 ffmpeg 导出编码器运动矢量
         stream.side_data_type = "MOTION_VECTORS"
@@ -207,7 +207,7 @@ def get_scene_info(video_path: str) -> Dict:
     # 时长（秒）
     cap_dist = subprocess.run(
         ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", video_path],
-        capture_output=True, text=True, timeout=30)
+        capture_output=True, text=True, timeout=30, encoding="utf-8", errors="replace")
     dur = 0.0
     try:
         dur = float(json.loads(cap_dist.stdout)["format"]["duration"])

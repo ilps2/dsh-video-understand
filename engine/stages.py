@@ -56,7 +56,7 @@ def _load_llm_config():
     if os.path.exists(cred):
         try:
             keys = {}
-            with open(cred) as f:
+            with open(cred, encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if line.startswith("XIAOMI_API_KEY:"):
@@ -165,7 +165,7 @@ def probe_media(ctx: ProcessingContext) -> bool:
             "-show_streams",
             ctx.local_video_path
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, encoding="utf-8", errors="replace")
         
         if result.returncode != 0:
             ctx.add_error(ErrorCode.MEDIA_PROBE_FAILED.value, 
@@ -237,7 +237,7 @@ def extract_audio(ctx: ProcessingContext) -> bool:
             "-f", "wav",
             ctx.audio_path
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120, encoding="utf-8", errors="replace")
         
         if result.returncode != 0:
             ctx.add_error(ErrorCode.FFMPEG_FAILED.value, 
@@ -861,7 +861,7 @@ def probe_dur(video):
         r = subprocess.run(
             ["ffprobe", "-v", "error", "-select_streams", "v:0",
              "-show_entries", "stream=duration", "-of", "csv=p=0", video],
-            capture_output=True, text=True, timeout=30)
+            capture_output=True, text=True, timeout=30, encoding="utf-8", errors="replace")
         return float(r.stdout.strip() or 0)
     except Exception:
         return 0.0
@@ -1191,13 +1191,13 @@ def retranscribe_window(ctx: ProcessingContext, window: str, model: str = "base"
     out = os.path.join(ctx.work_dir, f"rt_{a}_{b}.jsonl")
     subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", str(a), "-to", str(b),
                     "-i", ctx.local_video_path, "-vn", "-ac", "1", "-ar", "16000", wav],
-                   capture_output=True, timeout=120)
+                   capture_output=True, timeout=120, encoding="utf-8", errors="replace")
 
     asr_script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                               "livestream-highlight", "asr.py")
     r = subprocess.run([sys.executable, asr_script, "--video", wav, "--out", out,
                         "--model", model, "--device", "auto"],
-                       capture_output=True, timeout=600)
+                       capture_output=True, timeout=600, encoding="utf-8", errors="replace")
     if r.returncode != 0 or not os.path.exists(out):
         print(f"  ⚠️ 局部重转写失败: {r.stderr[-200:]}")
         return 0

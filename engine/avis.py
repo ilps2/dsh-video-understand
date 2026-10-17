@@ -32,6 +32,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+
+# --- Windows: 让 stdout/stderr 走 UTF-8，避免默认 GBK 打印 emoji/中文时崩溃或乱码 ---
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 # ── Paths ──────────────────────────────────────────────────────────
 BASE = Path(__file__).resolve().parent
 sys.path.insert(0, str(BASE))
@@ -46,9 +54,9 @@ def run(cmd, desc="", timeout=300, cwd=None, shell=False):
     kwargs = dict(timeout=timeout, cwd=cwd or str(BASE))
     if shell:
         kwargs["shell"] = True
-        r = subprocess.run(cmd, capture_output=True, text=True, **kwargs)
+        r = subprocess.run(cmd, capture_output=True, text=True, **kwargs, encoding="utf-8", errors="replace")
     else:
-        r = subprocess.run(cmd, capture_output=True, text=True, **kwargs)
+        r = subprocess.run(cmd, capture_output=True, text=True, **kwargs, encoding="utf-8", errors="replace")
     if r.returncode != 0 and r.stderr.strip():
         print(f"  STDERR: {r.stderr.strip()[-300:]}", flush=True)
     return r
@@ -136,7 +144,7 @@ def extract_clip_embeddings(video_path: Path, avis_dir: Path,
     if clip_path.exists() and meta_path.exists():
         print("  Using existing CLIP embeddings")
         emb = np.load(clip_path)["embeddings"]
-        with open(meta_path) as f:
+        with open(meta_path, encoding="utf-8") as f:
             meta = json.load(f)
         return emb, meta["timestamps"]
     
@@ -161,7 +169,7 @@ def extract_clip_embeddings(video_path: Path, avis_dir: Path,
     # Probe duration
     r = subprocess.run(
         ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", str(video_path)],
-        capture_output=True, text=True)
+        capture_output=True, text=True, encoding="utf-8", errors="replace")
     dur = float(json.loads(r.stdout)["format"]["duration"])
     
     # Extract keyframes
@@ -184,7 +192,7 @@ def extract_clip_embeddings(video_path: Path, avis_dir: Path,
                     ["ffmpeg", "-y", "-v", "error", "-ss", str(ts),
                      "-i", str(video_path), "-vframes", "1", "-q:v", "3",
                      str(frame_path)],
-                    capture_output=True)
+                    capture_output=True, encoding="utf-8", errors="replace")
                 if frame_path.exists():
                     frames.append(Image.open(frame_path).convert("RGB"))
             
@@ -207,7 +215,7 @@ def extract_clip_embeddings(video_path: Path, avis_dir: Path,
     emb_arr = np.array(embeddings, dtype=np.float32)
     np.savez_compressed(clip_path, embeddings=emb_arr)
     
-    with open(meta_path, "w") as f:
+    with open(meta_path, "w", encoding="utf-8") as f:
         json.dump({"timestamps": timestamps, "model": "ViT-B-32"}, f)
     
     print(f"  ✅ {len(timestamps)} frames, {emb_arr.shape}")
@@ -225,7 +233,7 @@ def search_avis(avis_dir: Path, query: str, top_k: int = 5):
         raise SystemExit(f"No CLIP embeddings in {avis_dir}. Encode with --clip first.")
     
     emb = np.load(clip_path)["embeddings"]
-    with open(meta_path) as f:
+    with open(meta_path, encoding="utf-8") as f:
         meta = json.load(f)
     timestamps = meta["timestamps"]
     
@@ -277,7 +285,7 @@ def _ensure_h264(video_path: Path) -> Path:
     r = subprocess.run(
         ["ffprobe", "-v", "quiet", "-select_streams", "v:0",
          "-show_entries", "stream=codec_name", "-of", "csv=p=0",
-         str(video_path)], capture_output=True, text=True)
+         str(video_path)], capture_output=True, text=True, encoding="utf-8", errors="replace")
     codec = r.stdout.strip().lower()
     if codec not in NECESSARY:
         return video_path
@@ -291,7 +299,7 @@ def _ensure_h264(video_path: Path) -> Path:
         "-c:a", "aac", "-b:a", "128k",
         "-movflags", "+faststart",
         str(h264_path)
-    ], capture_output=True, text=True, timeout=900)
+    ], capture_output=True, text=True, timeout=900, encoding="utf-8", errors="replace")
     if r.returncode != 0 or not h264_path.exists():
         print(f"  ❌ Transcode failed ({r.stderr[-120:] if r.stderr else 'unknown'}) — continuing with {codec} (MV may be zero)")
         return video_path
@@ -336,7 +344,7 @@ def curate_video(url: str, output_dir: Path = None, asr_model: str = "tiny",
     if not yt_python:
         for candidate in ["/usr/local/bin/python3", "python3"]:
             r = subprocess.run([candidate, "-c", "import yt_dlp; print('ok')"],
-                              capture_output=True, text=True, timeout=10)
+                              capture_output=True, text=True, timeout=10, encoding="utf-8", errors="replace")
             if r.stdout.strip() == "ok":
                 yt_python = candidate
                 break
@@ -356,7 +364,7 @@ def curate_video(url: str, output_dir: Path = None, asr_model: str = "tiny",
     ]
     
     print(f"  Running: {' '.join(yt_cmd[:5])}...")
-    r = subprocess.run(yt_cmd, capture_output=True, text=True, timeout=600, cwd=str(dl_dir))
+    r = subprocess.run(yt_cmd, capture_output=True, text=True, timeout=600, cwd=str(dl_dir), encoding="utf-8", errors="replace")
     
     if r.returncode != 0:
         print(f"  Download failed: {r.stderr[-300:]}")
@@ -378,7 +386,7 @@ def curate_video(url: str, output_dir: Path = None, asr_model: str = "tiny",
     # Check duration
     r = subprocess.run(
         ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", str(video_path)],
-        capture_output=True, text=True)
+        capture_output=True, text=True, encoding="utf-8", errors="replace")
     dur = float(json.loads(r.stdout)["format"]["duration"])
     print(f"  Duration: {dur:.0f}s ({dur/60:.1f}min)")
     
@@ -431,7 +439,7 @@ def curate_video(url: str, output_dir: Path = None, asr_model: str = "tiny",
     avis_tokens = 0
     transcript_path = pkg_dir / "transcript.jsonl"
     if transcript_path.exists():
-        with open(transcript_path) as f:
+        with open(transcript_path, encoding="utf-8") as f:
             avis_tokens = sum(len(l) for l in f) // 2  # rough: 2 chars ~ 1 token
     
     # Minimum avis_tokens for display (CLIP + manifest overhead)
@@ -462,7 +470,7 @@ Token comparison (per AI query):
     
     # Write README
     readme_path = pkg_dir / "README.md"
-    with open(readme_path, "w") as f:
+    with open(readme_path, "w", encoding="utf-8") as f:
         f.write(f"# AVIS: {title}\n\n")
         f.write(f"- **Duration:** {mins}m{secs}s\n")
         f.write(f"- **Package:** {pkg_size:.0f}MB\n")
@@ -1042,7 +1050,7 @@ def encode_video(video_path: Path, output_dir: Path = None,
     segs = []
     n_segs = 0
     if transcript_path.exists():
-        segs = [json.loads(l) for l in open(transcript_path)]
+        segs = [json.loads(l) for l in open(transcript_path, encoding="utf-8")]
         n_segs = len(segs)
     print(f"  {n_segs} segments")
 
@@ -1054,7 +1062,7 @@ def encode_video(video_path: Path, output_dir: Path = None,
                  "--video", str(video), "--out", str(transcript_path),
                  "--model", retry_model, "--device", asr_device], desc="ASR retry", timeout=1200)
         if transcript_path.exists():
-            segs = [json.loads(l) for l in open(transcript_path)]
+            segs = [json.loads(l) for l in open(transcript_path, encoding="utf-8")]
             n_segs = len(segs)
             asr_model = retry_model  # manifest 记录实际生效模型
         print(f"  retry: {n_segs} segments")
@@ -1241,7 +1249,7 @@ def encode_video(video_path: Path, output_dir: Path = None,
     }
 
     manifest_path = avis_dir / "avis.json"
-    with open(manifest_path, "w") as f:
+    with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2, ensure_ascii=False)
 
     print(f"\n  ✅ AVIS encoded: {avis_dir}/")
@@ -1263,7 +1271,7 @@ def clip_from_avis(avis_dir: Path, max_clips: int = 3,
     if not manifest_path.exists():
         raise SystemExit(f"No avis.json found in {avis_dir}")
 
-    with open(manifest_path) as f:
+    with open(manifest_path, encoding="utf-8") as f:
         m = json.load(f)
 
     video_path = Path(m["video"]["path"])
@@ -1297,7 +1305,7 @@ def clip_from_avis(avis_dir: Path, max_clips: int = 3,
     transcript_path = avis_dir / "transcript.jsonl"
     timeline_path = avis_dir / "timeline.csv"
 
-    segs = [json.loads(l) for l in open(transcript_path)] if transcript_path.exists() else []
+    segs = [json.loads(l) for l in open(transcript_path, encoding="utf-8")] if transcript_path.exists() else []
     tl = pd.read_csv(timeline_path)
     score = tl["score"].to_numpy()
 
@@ -1578,7 +1586,7 @@ def clip_from_avis(avis_dir: Path, max_clips: int = 3,
 
     # --- Update manifest ---
     m["clips"] = selected
-    with open(manifest_path, "w") as f:
+    with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump(m, f, indent=2, ensure_ascii=False)
 
     # --- Cleanup temp PNGs ---
@@ -1661,7 +1669,7 @@ def show_info(avis_dir: str):
     if not manifest_path.exists():
         raise SystemExit(f"No avis.json found in {avis_dir}")
 
-    with open(manifest_path) as f:
+    with open(manifest_path, encoding="utf-8") as f:
         m = json.load(f)
 
     v = m["video"]

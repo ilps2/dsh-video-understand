@@ -61,7 +61,7 @@ def compute_media_fingerprint(video_path: str) -> Dict:
             "-show_streams",
             video_path
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, encoding="utf-8", errors="replace")
         
         if result.returncode == 0:
             info = json.loads(result.stdout)

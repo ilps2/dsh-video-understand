@@ -44,7 +44,7 @@ from collections import defaultdict
 def probe_duration(video_path):
     r = subprocess.run(
         f"ffprobe -v error -show_entries format=duration -of csv=p=0 '{video_path}'",
-        shell=True, capture_output=True, text=True)
+        shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace")
     return float(r.stdout.strip()) if r.stdout.strip() else 0
 
 
@@ -126,7 +126,7 @@ def extract_contiguous_blocks(video_path, windows, out_dir, block_fps=8,
                 f"scale=w={max_dim}:h={max_dim}:force_original_aspect_ratio=decrease' "
                 f"-q:v 3 '{block_dir}/frame_%03d.jpg'"
             )
-            subprocess.run(cmd, shell=True, capture_output=True)
+            subprocess.run(cmd, shell=True, capture_output=True, encoding="utf-8", errors="replace")
             frames = sorted(block_dir.glob("frame_*.jpg"))
 
             if frames:
@@ -164,7 +164,7 @@ def detect_scene_changes(video_path, sample_fps=2, threshold=0.30):
             f"-vf 'fps={sample_fps}:round=down,scale=256:256' "
             f"-q:v 5 '{td}/scan_%04d.jpg'"
         )
-        subprocess.run(cmd, shell=True, capture_output=True)
+        subprocess.run(cmd, shell=True, capture_output=True, encoding="utf-8", errors="replace")
         scan_frames = sorted(td.glob("scan_*.jpg"))
         if len(scan_frames) < 3: return []
 
@@ -195,7 +195,7 @@ def extract_uniform_frames(video_path, out_dir, fps=1.0, max_dim=512):
         f"ffmpeg -y -v error -i '{video_path}' "
         f"-vf 'fps={fps}:round=down,scale=w={max_dim}:h={max_dim}:force_original_aspect_ratio=decrease' "
         f"-q:v 3 '{out_dir}/raw_%04d.jpg'")
-    subprocess.run(cmd, shell=True, capture_output=True)
+    subprocess.run(cmd, shell=True, capture_output=True, encoding="utf-8", errors="replace")
     return sorted(out_dir.glob("raw_*.jpg"))
 
 
@@ -355,7 +355,7 @@ def main():
 
         # 保存块索引
         csv_path = out_dir / "blocks.csv"
-        with open(csv_path, "w", newline="") as f:
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=[
                 "block_id", "start_sec", "end_sec", "duration_sec",
                 "frame_count", "dir"])
@@ -419,7 +419,7 @@ def main():
         csv_rows.append({"frame_file": new.name, "time_sec": round(t, 2)})
 
     csv_path = out_dir / "frames.csv"
-    with open(csv_path, "w", newline="") as f:
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=["frame_file", "time_sec"])
         w.writeheader(); w.writerows(csv_rows)
 

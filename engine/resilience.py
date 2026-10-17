@@ -145,8 +145,7 @@ def safe_run(cmd: list,
             text=True,
             timeout=timeout,
             cwd=cwd,
-            env=run_env
-        )
+            env=run_env, encoding="utf-8", errors="replace")
         return result
     except subprocess.TimeoutExpired:
         return subprocess.CompletedProcess(

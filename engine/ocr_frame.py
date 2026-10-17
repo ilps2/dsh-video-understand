@@ -93,7 +93,7 @@ class FrameOCR:
             ]
             
             try:
-                subprocess.run(cmd, capture_output=True, check=True)
+                subprocess.run(cmd, capture_output=True, check=True, encoding="utf-8", errors="replace")
                 if os.path.exists(frame_path):
                     frames.append((t, frame_path))
             except subprocess.CalledProcessError:
@@ -111,7 +111,7 @@ class FrameOCR:
                 "-show_format",
                 video_path
             ]
-            r = subprocess.run(cmd, capture_output=True, text=True)
+            r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
             if r.returncode == 0:
                 info = json.loads(r.stdout)
                 return float(info.get("format", {}).get("duration", 0))

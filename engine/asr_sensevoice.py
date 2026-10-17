@@ -162,7 +162,7 @@ class SenseVoiceASR:
         ]
         
         try:
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=120, encoding="utf-8", errors="replace")
             if r.returncode != 0:
                 print(f"[SenseVoice] 音频提取失败: {r.stderr[:300]}")
                 return False
