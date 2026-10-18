@@ -26,18 +26,26 @@ if os.path.exists("/etc/ssl/cert.pem"):
     os.environ.setdefault("SSL_CERT_FILE", "/etc/ssl/cert.pem")
     ssl._create_default_https_context = lambda: ssl.create_default_context(cafile="/etc/ssl/cert.pem")
 def _detect_python():
-    """Auto-detect Python with dependencies: prefer framework 3.13 (has all deps)."""
+    """Auto-detect Python with dependencies.
+
+    Prefer the interpreter already running this engine (sys.executable) so
+    Windows / venv / non-macOS installs work without a `python3` shim.
+    """
     env = os.environ.get("VIDEO_UNDERSTAND_PYTHON")
     if env:
         return env
+    # Engine itself is already the target interpreter — most reliable.
+    if getattr(sys, "executable", None):
+        return sys.executable
     candidates = [
         "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
         "python3",
+        "python",
     ]
-    for p in candidates:
-        if "/" in p and not os.path.exists(p):
+    for cand in candidates:
+        if "/" in cand and not os.path.exists(cand):
             continue
-        return p
+        return cand
     return "python3"
 
 PY = _detect_python()
@@ -141,20 +149,34 @@ def fetch_title(url_or_bv):
 
 def download(url_or_bv, outdir):
     print(f"⬇️  下载 {url_or_bv} → 360p...", flush=True)
-    # Full URLs (including bangumi): use yt-dlp directly
-    if url_or_bv.strip().lower().startswith(("http://", "https://")):
-        r = run([PY, "-m", "yt_dlp",
-                 "-f", "worst[ext=mp4]/worst",
-                 "--no-playlist",
-                 "-o", os.path.join(outdir, "%(title)s.%(ext)s"),
-                 url_or_bv])
-    else:
-        r = run([PY, BILI, "download", url_or_bv, "--quality", "360", "-o", outdir])
+    target = url_or_bv.strip()
+    # Bare BV id: always expand to a Bilibili URL so we never depend on a
+    # machine-local bili_download.py (silent empty stderr on other PCs).
+    bv = re.search(r"BV[0-9A-Za-z]{10}", target)
+    if bv and not target.lower().startswith(("http://", "https://")):
+        target = f"https://www.bilibili.com/video/{bv.group(0)}"
+    # B站常见是 video-only mp4 + audio-only m4a，带音轨的整段 mp4 常不可用。
+    # 让 yt-dlp 选 ≤360p 视频流 + 音频再合并；其它源再退回 worst。
+    fmt = "bv*[height<=360]+ba/b[height<=360]/worst"
+    r = run([PY, "-m", "yt_dlp",
+             "-f", fmt,
+             "--no-playlist",
+             "-o", os.path.join(outdir, "%(title)s.%(ext)s"),
+             target])
     if r.returncode != 0:
-        raise SystemExit(f"下载失败: {r.stderr[-300:]}")
+        err = (r.stderr or "").strip() or (r.stdout or "").strip() or f"(no stderr; exit {r.returncode})"
+        raise SystemExit(f"下载失败: {err[-300:]}")
     mp4s = sorted(glob.glob(os.path.join(outdir, "*.mp4")), key=os.path.getmtime)
     if not mp4s:
-        raise SystemExit("下载后未找到 mp4")
+        # 合并后偶发是 mkv/webm
+        others = sorted(
+            glob.glob(os.path.join(outdir, "*.*")),
+            key=os.path.getmtime,
+        )
+        others = [f for f in others if f.lower().endswith((".mp4", ".mkv", ".webm", ".m4a"))]
+        if not others:
+            raise SystemExit("下载后未找到视频文件")
+        return others[-1], fetch_title(url_or_bv)
     return mp4s[-1], fetch_title(url_or_bv)
 
 def encode(video_path, workdir, asr_model="tiny", sub="avis_tiny"):

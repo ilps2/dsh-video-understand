@@ -224,7 +224,16 @@ export function apply(ctx, config = {}) {
       } catch {
         throw new Error(`video_understand produced no JSON: ${stdout.trim().slice(0, 300)}`)
       }
-      return parsed
+      // outputSchema 声明 video 为对象；旧引擎路径可能返回 basename 字符串。
+      // 不规整时 DSH 会丢弃整个工具结果（"value.video" must be an object）。
+      const video = parsed.video && typeof parsed.video === 'object'
+        ? parsed.video
+        : {
+            path: typeof parsed.video === 'string' ? parsed.video : undefined,
+            title: parsed.title,
+            duration_s: parsed.duration_s,
+          }
+      return { ...parsed, video }
     },
   })
 
