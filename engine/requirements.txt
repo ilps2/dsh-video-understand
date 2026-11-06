@@ -9,6 +9,7 @@ opencv-python-headless>=4.8   # 场景检测 / 运动轨迹（headless 避免 GU
 yt-dlp>=2024.8                # B站视频下载
 xxhash>=3.4                   # cache_content 内容哈希
 pandas>=2.0                   # scene_classifier：场景分类权重（pd.Series）
+pillow>=10.0                  # frame_prep / avis：帧图读写（L0 路径就用到）
 
 # ⚠️ 必须给 av 加上界：PyAV 19 移除了 av.open(metadata_errors=...) 参数，
 #    而 faster-whisper 1.2.1 仍在用它 ⇒ 装到 av 19 会让 ASR 转写 100% 崩。
