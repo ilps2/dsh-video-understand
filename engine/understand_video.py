@@ -202,9 +202,13 @@ def encode_cached(video_path, workdir, asr_model="tiny", use_clip=False):
     
     # 检查缓存是否命中
     cached_avis = cache.get(video_path)
-    if cached_avis and os.path.exists(os.path.join(cached_avis, "avis.json")):
-        tag = asr_model + ("_clip" if use_clip else "")
-        print(f"♻️  语义层缓存命中: {tag}（内容哈希）", flush=True)
+    layer_tag = asr_model + ("_clip" if use_clip else "")
+    # 只按内容哈希命中是不够的：同一个哈希目录下分 tiny / base / base_clip 多层，
+    # 命中别的层就等于什么都没建（–-layer 会静默空转，日志却写"已建"）。
+    cached_layer = os.path.basename(os.path.dirname(os.path.normpath(cached_avis))) if cached_avis else ""
+    if (cached_avis and cached_layer == layer_tag
+            and os.path.exists(os.path.join(cached_avis, "avis.json"))):
+        print(f"♻️  语义层缓存命中: {layer_tag}（内容哈希）", flush=True)
         cache.close()
         return cached_avis, cache.compute_hash(video_path)
     
@@ -233,10 +237,18 @@ def encode_cached(video_path, workdir, asr_model="tiny", use_clip=False):
     return avis_dir, content_hash
 
 def layer_cache_status(video_path, workdir):
-    """检查视频已有哪些语义层缓存。返回 (has_tiny, has_full)。"""
-    import hashlib
-    st = os.stat(video_path)
-    h = hashlib.md5(f"{video_path}:{st.st_size}:{int(st.st_mtime)}".encode()).hexdigest()[:10]
+    """检查视频已有哪些语义层缓存。返回 (has_tiny, has_full)。
+
+    必须与写入方 encode_cached() 共用同一套哈希（内容哈希）。旧实现用的是
+    md5(路径:大小:mtime)[:10]，与 avis_cache/<content_hash>/<tag> 永远对不上，
+    结果已建好的层检测不到、suggest_layer 恒为 True。
+    """
+    from engine.cache_content import ContentAddressableCache
+    cache = ContentAddressableCache(cache_root=os.path.join(workdir, "content_cache"))
+    try:
+        h = cache.compute_hash(video_path)
+    finally:
+        cache.close()
     base = os.path.join(workdir, "avis_cache", h)
     has_tiny = os.path.exists(os.path.join(base, "tiny"))
     has_full = os.path.exists(os.path.join(base, "base_clip"))
@@ -294,9 +306,9 @@ def is_timing_question(question):
 
 def clip_search(avis_dir, query, top_k=3):
     """调 avis.py search_avis 返回 [(timestamp, score)]。"""
-    code = (f"import sys, pathlib; sys.path.insert(0, {os.path.dirname(AVIS)!r}); "
+    code = (f"import sys, pathlib, json; sys.path.insert(0, {os.path.dirname(AVIS)!r}); "
             f"from avis import search_avis; "
-            f"print(repr(search_avis(pathlib.Path({str(avis_dir)!r}), {query!r}, {top_k})))")
+            f"print(json.dumps(search_avis(pathlib.Path({str(avis_dir)!r}), {query!r}, {top_k})))")
     r = run([PY, "-c", code], timeout=180)
     for line in reversed(r.stdout.strip().splitlines()):
         if line.startswith("["):
